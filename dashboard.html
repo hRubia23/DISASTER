@@ -1,0 +1,85 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Analytics Dashboard</title>
+  <link rel="stylesheet" href="styles.css" />
+  <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+</head>
+<body>
+  <div class="page-wrap fade-in">
+    <nav class="top-nav">
+      <div class="brand">
+        <div class="alert-logo"></div>
+        <div>
+          <h2>Disaster Tweet Classifier</h2>
+          <span>Operations analytics</span>
+        </div>
+      </div>
+      <div class="nav-links">
+        <a class="btn btn-secondary" href="index.html">Classify</a>
+        <a class="btn btn-secondary" href="dashboard.html">Dashboard</a>
+      </div>
+    </nav>
+
+    <header class="dashboard-head">
+      <div>
+        <h2>Analytics Dashboard</h2>
+        <p class="subtle">Comprehensive overview of classified tweets</p>
+      </div>
+      <div class="nav-links">
+        <button class="btn btn-outline">Export CSV</button>
+        <button class="btn btn-danger" id="clearAllBtn">Clear All</button>
+      </div>
+    </header>
+
+    <section class="stat-grid">
+      <article class="card stat-card">
+        <h4>Total Classified</h4>
+        <p class="metric" id="totalCount">0</p>
+        <p class="supporting">All time tweets</p>
+      </article>
+      <article class="card stat-card">
+        <h4>Urgent Requests</h4>
+        <p class="metric red" id="rescueCount">0</p>
+        <p class="supporting">Immediate attention needed</p>
+      </article>
+      <article class="card stat-card">
+        <h4>Avg. Confidence</h4>
+        <p class="metric" id="avgConfidence">0%</p>
+        <p class="supporting">Model accuracy</p>
+      </article>
+      <article class="card stat-card">
+        <h4>Safety Updates</h4>
+        <p class="metric green" id="safetyCount">0</p>
+        <p class="supporting">Relief & evacuation info</p>
+      </article>
+    </section>
+
+    <section class="analytics-grid">
+      <article class="card chart-card">
+        <h3>Category Distribution</h3>
+        <p class="subtle">Pie chart breakdown by predicted class</p>
+        <canvas id="pieChart"></canvas>
+      </article>
+
+      <article class="card chart-card">
+        <h3>Category Counts</h3>
+        <p class="subtle">Tweet count per disaster category</p>
+        <canvas id="barChart"></canvas>
+      </article>
+    </section>
+
+    <section class="card">
+      <h3>Classification History</h3>
+      <p class="subtle">Recent classified tweets</p>
+      <div class="history-list" id="historyList">
+        <p style="text-align: center; color: #9aa3af; padding: 20px;">No classifications yet. Start by classifying a tweet!</p>
+      </div>
+    </section>
+  </div>
+
+  <script src="script.js"></script>
+</body>
+</html>

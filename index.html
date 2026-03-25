@@ -1,0 +1,107 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Disaster Tweet Classifier</title>
+  <link rel="stylesheet" href="styles.css" />
+</head>
+<body>
+  <div class="page-wrap">
+    <nav class="top-nav">
+      <div class="brand">
+        <div class="alert-logo"></div>
+        <div>
+          <h1>Disaster Tweet Classifier</h1>
+          <span>AI-powered emergency triage</span>
+        </div>
+      </div>
+      <div class="nav-links">
+        <a class="btn btn-secondary" href="index.html">Classify</a>
+        <a class="btn btn-secondary" href="dashboard.html">Dashboard</a>
+      </div>
+    </nav>
+
+    <section class="hero">
+      <h2>Emergency Tweet Classification</h2>
+      <p>
+        Use machine learning to categorize disaster-related tweets and prioritize emergency responses in real-time.
+        Identify rescue requests, damage reports, safety updates, and general information quickly and reliably.
+      </p>
+      <div class="hero-actions">
+        <button class="btn btn-primary" id="singleModeBtn">Single Tweet</button>
+        <button class="btn btn-secondary" id="batchModeBtn">Batch Upload</button>
+      </div>
+    </section>
+
+    <section class="grid">
+      <article class="card">
+        <div id="singleView">
+          <h3>Enter Tweet Text</h3>
+          <p class="subtle">Paste a tweet below for instant classification.</p>
+          <textarea id="tweetInput" class="input-area" placeholder="Example: Family trapped on rooftop near Central Bridge, flood waters rising fast. Need rescue now."></textarea>
+          <button class="btn btn-primary" id="classifyBtn">Classify Tweet</button>
+
+          <div class="examples">
+            <h3>Example Tweets</h3>
+            <div class="examples-list">
+              <button class="example-item" type="button">URGENT: 3 people trapped inside a collapsed building near Maple Street. Need rescue teams now!</button>
+              <button class="example-item" type="button">Bridge on Highway 7 has severe structural damage after earthquake. Avoid the area.</button>
+              <button class="example-item" type="button">Relief camp at City Hall now open with food and medical support for evacuees.</button>
+              <button class="example-item" type="button">Heavy rain expected for next 12 hours in coastal districts, stay alert for flooding.</button>
+            </div>
+          </div>
+        </div>
+
+        <div id="batchView" class="hidden">
+          <h3>Batch Upload</h3>
+          <p class="subtle">Upload a text file or CSV with one tweet per line.</p>
+          <input id="batchFileInput" class="batch-file-input" type="file" accept=".txt,.csv,text/plain,text/csv" />
+          <div id="batchDropzone" class="batch-dropzone" role="button" tabindex="0" aria-label="Upload TXT or CSV file">
+            <div class="upload-icon">^</div>
+            <p class="upload-title">Click to upload or drag and drop</p>
+            <p class="upload-caption">TXT or CSV files (one tweet per line)</p>
+            <button type="button" class="btn btn-primary" id="selectBatchFileBtn">Select File</button>
+          </div>
+          <div class="batch-status" id="batchStatus">No file selected.</div>
+        </div>
+      </article>
+
+      <aside class="card">
+        <h3>Classification Categories</h3>
+        <p class="subtle">Color-coded labels help responders act quickly.</p>
+        <div class="category-stack">
+          <div class="category-pill cat-red">
+            <strong>🔴 Rescue Request</strong>
+            <p>Someone needs immediate help.</p>
+          </div>
+          <div class="category-pill cat-yellow">
+            <strong>🟡 Damage Report</strong>
+            <p>Infrastructure/property damage info.</p>
+          </div>
+          <div class="category-pill cat-green">
+            <strong>🟢 Safety Update</strong>
+            <p>Evacuation notices, relief distribution.</p>
+          </div>
+          <div class="category-pill cat-gray">
+            <strong>⚪ General Information</strong>
+            <p>Non-urgent news/updates.</p>
+          </div>
+        </div>
+
+        <div class="steps">
+          <h3>How It Works</h3>
+          <ol>
+            <li>Text preprocessing removes noise and normalizes language.</li>
+            <li>TF-IDF vectorization transforms tweet text into numeric features.</li>
+            <li>Machine learning model predicts the disaster category.</li>
+            <li>Priority alerting highlights urgent cases for emergency teams.</li>
+          </ol>
+        </div>
+      </aside>
+    </section>
+  </div>
+
+  <script src="script.js"></script>
+</body>
+</html>
