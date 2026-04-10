@@ -6,7 +6,7 @@
   <title>Classification Result</title>
   <link rel="stylesheet" href="styles.css" />
 </head>
-<body>
+<body data-auth-required="true">
   <div class="page-wrap fade-in">
     <nav class="top-nav">
       <div class="brand">
@@ -24,6 +24,8 @@
       <div class="nav-links" id="primaryNav">
         <a class="btn btn-secondary" href="index.html">Classify</a>
         <a class="btn btn-secondary" href="dashboard.html">Dashboard</a>
+        <span class="user-greeting" id="userGreeting"></span>
+        <button class="btn btn-outline" id="logoutBtn" type="button">Logout</button>
       </div>
     </nav>
 

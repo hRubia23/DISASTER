@@ -11,6 +11,60 @@ const batchStatus = document.getElementById('batchStatus');
 const DEFAULT_TWEET = 'Family of five trapped on rooftop near Riverbank Colony. Water level is rising rapidly and children are stranded. Please send immediate rescue boats.';
 const navToggle = document.getElementById('navToggle');
 const topNavLinks = document.querySelector('.top-nav .nav-links');
+const logoutBtn = document.getElementById('logoutBtn');
+const userGreeting = document.getElementById('userGreeting');
+
+async function getCurrentSessionUser() {
+  if (window.location.protocol === 'file:') {
+    return null;
+  }
+
+  try {
+    const response = await fetch('/api/me', {
+      credentials: 'include'
+    });
+
+    if (!response.ok) {
+      return null;
+    }
+
+    const payload = await response.json();
+    return payload.logged_in ? payload.user : null;
+  } catch (error) {
+    return null;
+  }
+}
+
+async function initAuthGuard() {
+  const authRequired = document.body?.dataset?.authRequired === 'true';
+  const user = await getCurrentSessionUser();
+
+  if (authRequired && !user && window.location.protocol !== 'file:') {
+    window.location.href = 'auth.html';
+    return;
+  }
+
+  if (userGreeting && user) {
+    userGreeting.textContent = `Signed in as ${user.full_name}`;
+  }
+
+  if (logoutBtn) {
+    logoutBtn.addEventListener('click', async () => {
+      try {
+        await fetch('/api/logout', {
+          method: 'POST',
+          credentials: 'include'
+        });
+      } catch (error) {
+        // Ignore logout request failures and still redirect to auth screen.
+      }
+
+      window.location.href = 'auth.html';
+    });
+  }
+}
+
+initAuthGuard();
 
 function syncMobileNavState() {
   if (!navToggle || !topNavLinks) {

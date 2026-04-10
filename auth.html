@@ -1,0 +1,534 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8"/>
+<meta name="viewport" content="width=device-width,initial-scale=1.0"/>
+<title>Login - Disaster Tweet Classifier</title>
+<style>
+  @import url('https://fonts.googleapis.com/css2?family=Syne:wght@400;600;700;800&family=DM+Sans:wght@300;400;500&display=swap');
+
+  *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+
+  :root {
+    --bg: #0b0f19;
+    --surface: #111827;
+    --surface2: #1a2235;
+    --border: rgba(255,255,255,0.07);
+    --red: #ef4444;
+    --amber: #f59e0b;
+    --green: #22c55e;
+    --text: #f1f5f9;
+    --muted: #64748b;
+    --subtle: #94a3b8;
+    --input-bg: #0f172a;
+  }
+
+  body {
+    font-family: 'DM Sans', sans-serif;
+    background: var(--bg);
+    color: var(--text);
+    min-height: 100vh;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    overflow: hidden;
+    position: relative;
+  }
+
+  body::before {
+    content: '';
+    position: fixed;
+    inset: 0;
+    background:
+      radial-gradient(ellipse 80% 60% at 20% 10%, rgba(239,68,68,0.08) 0%, transparent 60%),
+      radial-gradient(ellipse 60% 80% at 85% 80%, rgba(245,158,11,0.06) 0%, transparent 60%),
+      radial-gradient(ellipse 50% 50% at 50% 50%, rgba(17,24,39,0.9) 0%, transparent 100%);
+    pointer-events: none;
+    z-index: 0;
+    animation: bgPulse 8s ease-in-out infinite alternate;
+  }
+
+  @keyframes bgPulse {
+    0% { opacity: 0.8; }
+    100% { opacity: 1; }
+  }
+
+  body::after {
+    content: '';
+    position: fixed;
+    inset: 0;
+    background-image:
+      linear-gradient(rgba(255,255,255,0.02) 1px, transparent 1px),
+      linear-gradient(90deg, rgba(255,255,255,0.02) 1px, transparent 1px);
+    background-size: 48px 48px;
+    pointer-events: none;
+    z-index: 0;
+  }
+
+  .auth-shell {
+    position: relative;
+    z-index: 1;
+    display: flex;
+    gap: 0;
+    width: min(900px, 96vw);
+    min-height: 540px;
+    border-radius: 20px;
+    overflow: hidden;
+    box-shadow: 0 40px 100px rgba(0,0,0,0.6), 0 0 0 1px var(--border);
+    animation: shellIn 0.7s cubic-bezier(.22,1,.36,1) both;
+  }
+
+  @keyframes shellIn {
+    from { opacity: 0; transform: translateY(30px) scale(0.97); }
+    to   { opacity: 1; transform: none; }
+  }
+
+  .brand-panel {
+    flex: 0 0 340px;
+    background: linear-gradient(160deg, #1a0a0a 0%, #0f1520 60%, #0b0f19 100%);
+    border-right: 1px solid var(--border);
+    padding: 48px 36px;
+    display: flex;
+    flex-direction: column;
+    justify-content: space-between;
+    position: relative;
+    overflow: hidden;
+  }
+
+  .brand-panel::before {
+    content: '';
+    position: absolute;
+    top: -60px; left: -60px;
+    width: 280px; height: 280px;
+    background: radial-gradient(circle, rgba(239,68,68,0.15) 0%, transparent 70%);
+    pointer-events: none;
+  }
+
+  .logo-mark {
+    width: 48px; height: 48px;
+    border-radius: 12px;
+    background: linear-gradient(135deg, var(--red) 0%, #b91c1c 100%);
+    display: flex; align-items: center; justify-content: center;
+    font-size: 22px;
+    box-shadow: 0 8px 24px rgba(239,68,68,0.4);
+    margin-bottom: 20px;
+    animation: pulse 3s ease-in-out infinite;
+  }
+
+  @keyframes pulse {
+    0%, 100% { box-shadow: 0 8px 24px rgba(239,68,68,0.4); }
+    50%       { box-shadow: 0 8px 32px rgba(239,68,68,0.7); }
+  }
+
+  .brand-title {
+    font-family: 'Syne', sans-serif;
+    font-size: 22px;
+    font-weight: 800;
+    line-height: 1.2;
+    margin-bottom: 10px;
+  }
+
+  .brand-title span { color: var(--red); }
+
+  .brand-desc {
+    font-size: 13px;
+    color: var(--subtle);
+    line-height: 1.6;
+  }
+
+  .category-list {
+    display: flex;
+    flex-direction: column;
+    gap: 10px;
+    margin-top: 32px;
+  }
+
+  .cat-pill {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    background: rgba(255,255,255,0.04);
+    border: 1px solid var(--border);
+    border-radius: 8px;
+    padding: 10px 14px;
+    font-size: 12px;
+    color: var(--subtle);
+    transition: background 0.2s, border-color 0.2s;
+  }
+
+  .cat-pill:hover {
+    background: rgba(255,255,255,0.07);
+    border-color: rgba(255,255,255,0.12);
+  }
+
+  .dot {
+    width: 8px; height: 8px;
+    border-radius: 50%;
+    flex-shrink: 0;
+  }
+
+  .dot-red   { background: #ef4444; box-shadow: 0 0 6px #ef4444; }
+  .dot-amber { background: #f59e0b; box-shadow: 0 0 6px #f59e0b; }
+  .dot-green { background: #22c55e; box-shadow: 0 0 6px #22c55e; }
+  .dot-gray  { background: #64748b; }
+
+  .brand-footer {
+    font-size: 11px;
+    color: var(--muted);
+    margin-top: 32px;
+  }
+
+  .form-panel {
+    flex: 1;
+    background: var(--surface);
+    padding: 48px 44px;
+    display: flex;
+    flex-direction: column;
+    justify-content: center;
+  }
+
+  .tab-bar {
+    display: flex;
+    background: var(--input-bg);
+    border-radius: 10px;
+    padding: 4px;
+    margin-bottom: 32px;
+    border: 1px solid var(--border);
+  }
+
+  .tab-btn {
+    flex: 1;
+    padding: 9px 0;
+    border: none;
+    background: transparent;
+    color: var(--muted);
+    font-family: 'Syne', sans-serif;
+    font-size: 13px;
+    font-weight: 600;
+    letter-spacing: 0.04em;
+    border-radius: 7px;
+    cursor: pointer;
+    transition: all 0.25s;
+  }
+
+  .tab-btn.active {
+    background: var(--surface2);
+    color: var(--text);
+    box-shadow: 0 2px 8px rgba(0,0,0,0.3);
+  }
+
+  .tab-btn.active.danger { color: var(--red); }
+
+  .form-section { display: none; }
+  .form-section.visible {
+    display: block;
+    animation: fadeUp 0.35s cubic-bezier(.22,1,.36,1) both;
+  }
+
+  @keyframes fadeUp {
+    from { opacity: 0; transform: translateY(12px); }
+    to   { opacity: 1; transform: none; }
+  }
+
+  .form-heading {
+    font-family: 'Syne', sans-serif;
+    font-size: 24px;
+    font-weight: 800;
+    margin-bottom: 4px;
+  }
+
+  .form-sub {
+    font-size: 13px;
+    color: var(--subtle);
+    margin-bottom: 28px;
+  }
+
+  .field { margin-bottom: 16px; }
+
+  .field label {
+    display: block;
+    font-size: 12px;
+    font-weight: 500;
+    color: var(--subtle);
+    letter-spacing: 0.06em;
+    text-transform: uppercase;
+    margin-bottom: 7px;
+  }
+
+  .field input {
+    width: 100%;
+    background: var(--input-bg);
+    border: 1px solid var(--border);
+    border-radius: 9px;
+    padding: 11px 14px;
+    color: var(--text);
+    font-family: 'DM Sans', sans-serif;
+    font-size: 14px;
+    outline: none;
+    transition: border-color 0.2s, box-shadow 0.2s;
+  }
+
+  .field input:focus {
+    border-color: rgba(239,68,68,0.5);
+    box-shadow: 0 0 0 3px rgba(239,68,68,0.08);
+  }
+
+  .field input::placeholder { color: var(--muted); }
+
+  .row-2 {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 12px;
+  }
+
+  .btn-primary {
+    width: 100%;
+    padding: 13px;
+    background: linear-gradient(135deg, var(--red) 0%, #b91c1c 100%);
+    border: none;
+    border-radius: 10px;
+    color: #fff;
+    font-family: 'Syne', sans-serif;
+    font-size: 14px;
+    font-weight: 700;
+    letter-spacing: 0.05em;
+    cursor: pointer;
+    margin-top: 8px;
+    box-shadow: 0 6px 20px rgba(239,68,68,0.35);
+    transition: transform 0.15s, box-shadow 0.15s, opacity 0.15s;
+    position: relative;
+    overflow: hidden;
+  }
+
+  .btn-primary::after {
+    content: '';
+    position: absolute;
+    inset: 0;
+    background: linear-gradient(135deg, rgba(255,255,255,0.12), transparent);
+    opacity: 0;
+    transition: opacity 0.2s;
+  }
+
+  .btn-primary:hover { transform: translateY(-1px); box-shadow: 0 10px 28px rgba(239,68,68,0.45); }
+  .btn-primary:hover::after { opacity: 1; }
+  .btn-primary:active { transform: none; }
+
+  .divider {
+    display: flex;
+    align-items: center;
+    gap: 12px;
+    margin: 20px 0 16px;
+    color: var(--muted);
+    font-size: 12px;
+  }
+
+  .divider::before, .divider::after {
+    content: '';
+    flex: 1;
+    height: 1px;
+    background: var(--border);
+  }
+
+  .switch-link {
+    text-align: center;
+    font-size: 13px;
+    color: var(--subtle);
+  }
+
+  .switch-link button {
+    background: none;
+    border: none;
+    color: var(--red);
+    font-family: 'DM Sans', sans-serif;
+    font-weight: 500;
+    cursor: pointer;
+    text-decoration: underline;
+    font-size: 13px;
+    padding: 0;
+  }
+
+  .switch-link button:hover { opacity: 0.8; }
+
+  .forgot {
+    text-align: right;
+    margin-top: -8px;
+    margin-bottom: 16px;
+  }
+
+  .forgot button {
+    background: none;
+    border: none;
+    color: var(--muted);
+    font-size: 12px;
+    cursor: pointer;
+    font-family: 'DM Sans', sans-serif;
+    transition: color 0.2s;
+  }
+
+  .forgot button:hover { color: var(--subtle); }
+
+  .checkbox-row {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    margin-bottom: 16px;
+  }
+
+  .checkbox-row input[type=checkbox] {
+    width: 15px; height: 15px;
+    accent-color: var(--red);
+    cursor: pointer;
+  }
+
+  .checkbox-row label {
+    font-size: 12px;
+    color: var(--subtle);
+    cursor: pointer;
+  }
+
+  .alert-badge {
+    display: inline-flex;
+    align-items: center;
+    gap: 6px;
+    background: rgba(239,68,68,0.1);
+    border: 1px solid rgba(239,68,68,0.25);
+    border-radius: 20px;
+    padding: 4px 10px;
+    font-size: 11px;
+    color: var(--red);
+    margin-bottom: 20px;
+  }
+
+  .alert-dot {
+    width: 6px; height: 6px;
+    border-radius: 50%;
+    background: var(--red);
+    animation: blink 1.2s ease-in-out infinite;
+  }
+
+  @keyframes blink {
+    0%, 100% { opacity: 1; }
+    50%       { opacity: 0.3; }
+  }
+
+  .form-message {
+    min-height: 20px;
+    margin-top: 14px;
+    font-size: 12px;
+  }
+
+  .form-message.error {
+    color: #fda4af;
+  }
+
+  .form-message.success {
+    color: #86efac;
+  }
+
+  @media (max-width: 640px) {
+    .brand-panel { display: none; }
+    .form-panel { padding: 36px 24px; }
+    .auth-shell { width: 100vw; min-height: 100vh; border-radius: 0; }
+    .row-2 { grid-template-columns: 1fr; }
+  }
+</style>
+</head>
+<body>
+
+<div class="auth-shell">
+  <div class="brand-panel">
+    <div>
+      <div class="logo-mark">!</div>
+      <div class="brand-title">Disaster Tweet<br><span>Classifier</span></div>
+      <p class="brand-desc">AI-powered emergency triage system for real-time disaster response classification.</p>
+      <div class="category-list">
+        <div class="cat-pill"><div class="dot dot-red"></div>Rescue Request - Immediate help needed</div>
+        <div class="cat-pill"><div class="dot dot-amber"></div>Damage Report - Infrastructure alerts</div>
+        <div class="cat-pill"><div class="dot dot-green"></div>Safety Update - Relief and evacuation</div>
+        <div class="cat-pill"><div class="dot dot-gray"></div>General Info - Non-urgent updates</div>
+      </div>
+    </div>
+    <div class="brand-footer">Secure access - Emergency responders only</div>
+  </div>
+
+  <div class="form-panel">
+    <div class="tab-bar">
+      <button class="tab-btn active danger" id="showLoginBtn" type="button">Sign In</button>
+      <button class="tab-btn" id="showRegisterBtn" type="button">Register</button>
+    </div>
+
+    <form id="loginForm" class="form-section visible">
+      <div class="alert-badge"><div class="alert-dot"></div> System Active</div>
+      <div class="form-heading">Welcome back</div>
+      <p class="form-sub">Sign in to your responder account.</p>
+
+      <div class="field">
+        <label for="loginEmail">Email Address</label>
+        <input id="loginEmail" type="email" placeholder="you@agency.gov" autocomplete="email" required/>
+      </div>
+      <div class="field">
+        <label for="loginPassword">Password</label>
+        <input id="loginPassword" type="password" placeholder="........" autocomplete="current-password" required/>
+      </div>
+      <div class="forgot">
+        <button type="button">Forgot password?</button>
+      </div>
+      <div class="checkbox-row">
+        <input type="checkbox" id="remember"/>
+        <label for="remember">Keep me signed in for 30 days</label>
+      </div>
+      <button class="btn-primary" type="submit">Sign In -&gt;</button>
+
+      <div class="divider">or</div>
+      <div class="switch-link">
+        Don't have an account? <button type="button" data-switch-target="register">Create one</button>
+      </div>
+    </form>
+
+    <form id="registerForm" class="form-section">
+      <div class="form-heading">Create account</div>
+      <p class="form-sub">Join the emergency response network.</p>
+
+      <div class="row-2">
+        <div class="field">
+          <label for="registerFirstName">First Name</label>
+          <input id="registerFirstName" type="text" placeholder="Juan" required/>
+        </div>
+        <div class="field">
+          <label for="registerLastName">Last Name</label>
+          <input id="registerLastName" type="text" placeholder="dela Cruz" required/>
+        </div>
+      </div>
+      <div class="field">
+        <label for="registerEmail">Email Address</label>
+        <input id="registerEmail" type="email" placeholder="you@agency.gov" required/>
+      </div>
+      <div class="field">
+        <label for="registerAgency">Organization / Agency</label>
+        <input id="registerAgency" type="text" placeholder="NDRRMC / LGU / NGO"/>
+      </div>
+      <div class="row-2">
+        <div class="field">
+          <label for="registerPassword">Password</label>
+          <input id="registerPassword" type="password" placeholder="........" minlength="6" required/>
+        </div>
+        <div class="field">
+          <label for="registerConfirmPassword">Confirm Password</label>
+          <input id="registerConfirmPassword" type="password" placeholder="........" minlength="6" required/>
+        </div>
+      </div>
+      <button class="btn-primary" type="submit">Create Account -&gt;</button>
+
+      <div class="divider">or</div>
+      <div class="switch-link">
+        Already have an account? <button type="button" data-switch-target="login">Sign in</button>
+      </div>
+    </form>
+
+    <p id="authMessage" class="form-message" aria-live="polite"></p>
+  </div>
+</div>
+
+  <script src="auth-client.js"></script>
+</body>
+</html>
