@@ -96,27 +96,6 @@ a {
   gap: 10px;
 }
 
-.nav-toggle {
-  display: none;
-  width: 44px;
-  height: 44px;
-  border: 1px solid #dce3eb;
-  border-radius: 12px;
-  background: #fff;
-  align-items: center;
-  justify-content: center;
-  flex-direction: column;
-  gap: 4px;
-  cursor: pointer;
-}
-
-.nav-toggle span {
-  width: 18px;
-  height: 2px;
-  background: #2f3a49;
-  border-radius: 2px;
-}
-
 .btn {
   border: 0;
   border-radius: 12px;
@@ -717,8 +696,8 @@ a {
 
   .nav-links {
     width: 100%;
-    justify-content: flex-start;
-    flex-wrap: wrap;
+    display: grid;
+    grid-template-columns: repeat(2, minmax(0, 1fr));
   }
 
   .nav-links .btn {
@@ -750,37 +729,12 @@ a {
   }
 
   .top-nav {
-    flex-direction: row;
-    align-items: center;
-    justify-content: space-between;
-    flex-wrap: wrap;
     gap: 10px;
     margin-bottom: 14px;
   }
 
   .brand {
-    width: auto;
-    flex: 1;
-    min-width: 0;
     gap: 10px;
-  }
-
-  .nav-toggle {
-    display: inline-flex;
-  }
-
-  .top-nav .nav-links {
-    display: none;
-    width: 100%;
-    margin-top: 4px;
-    padding-top: 8px;
-    border-top: 1px solid #e7ecef;
-    grid-template-columns: 1fr;
-    gap: 8px;
-  }
-
-  .top-nav .nav-links.open {
-    display: grid;
   }
 
   .brand h1,
@@ -831,12 +785,16 @@ a {
     grid-template-columns: 1fr;
   }
 
-  .top-nav .nav-links .btn,
   .hero-actions .btn,
   #singleView > .btn,
   .batch-dropzone .btn,
   .dashboard-head .nav-links .btn {
     width: 100%;
+  }
+
+  .nav-links {
+    grid-template-columns: 1fr;
+    gap: 8px;
   }
 
   .input-area {
