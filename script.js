@@ -1,5 +1,6 @@
 const tweetInput = document.getElementById('tweetInput');
 const classifyBtn = document.getElementById('classifyBtn');
+const classifyBatchBtn = document.getElementById('classifyBatchBtn');
 const singleModeBtn = document.getElementById('singleModeBtn');
 const batchModeBtn = document.getElementById('batchModeBtn');
 const singleView = document.getElementById('singleView');
@@ -272,53 +273,63 @@ async function classifyTweetWithServer(text) {
   }
 }
 
-if (classifyBtn) {
-  classifyBtn.addEventListener('click', async () => {
-    const isBatchMode = batchView && !batchView.classList.contains('hidden');
-    const batchTweets = JSON.parse(localStorage.getItem('batchTweets') || '[]')
-      .map((line) => String(line).trim())
-      .filter((line) => line.length > 0);
+async function handleClassifyAction() {
+  const isBatchMode = batchView && !batchView.classList.contains('hidden');
+  const batchTweets = JSON.parse(localStorage.getItem('batchTweets') || '[]')
+    .map((line) => String(line).trim())
+    .filter((line) => line.length > 0);
 
-    if (isBatchMode && batchTweets.length > 0) {
-      const existing = JSON.parse(localStorage.getItem('classifications') || '[]');
-      const now = Date.now();
-      const records = await Promise.all(batchTweets.map(async (tweet, index) => {
-        const classification = await classifyTweetWithServer(tweet);
-        return {
-          tweet,
-          category: classification.category,
-          confidence: classification.confidence,
-          timestamp: new Date(now + index).toISOString(),
-          emoji: classification.categoryEmoji
-        };
-      }));
+  if (isBatchMode && batchTweets.length > 0) {
+    const existing = JSON.parse(localStorage.getItem('classifications') || '[]');
+    const now = Date.now();
+    const records = await Promise.all(batchTweets.map(async (tweet, index) => {
+      const classification = await classifyTweetWithServer(tweet);
+      return {
+        tweet,
+        category: classification.category,
+        confidence: classification.confidence,
+        timestamp: new Date(now + index).toISOString(),
+        emoji: classification.categoryEmoji
+      };
+    }));
 
-      localStorage.setItem('classifications', JSON.stringify([...records, ...existing]));
+    localStorage.setItem('classifications', JSON.stringify([...records, ...existing]));
 
-      if (tweetInput) {
-        tweetInput.value = batchTweets[0];
-      }
-
-      window.location.href = `result.html?tweet=${encodeURIComponent(batchTweets[0])}`;
-      return;
+    if (tweetInput) {
+      tweetInput.value = batchTweets[0];
     }
 
-    const tweet = tweetInput.value.trim() || DEFAULT_TWEET;
-    const classification = await classifyTweetWithServer(tweet);
+    window.location.href = `result.html?tweet=${encodeURIComponent(batchTweets[0])}`;
+    return;
+  }
 
-    const record = {
-      tweet,
-      category: classification.category,
-      confidence: classification.confidence,
-      timestamp: new Date().toISOString(),
-      emoji: classification.categoryEmoji
-    };
+  const tweet = (tweetInput?.value || '').trim() || DEFAULT_TWEET;
+  const classification = await classifyTweetWithServer(tweet);
 
-    const classifications = JSON.parse(localStorage.getItem('classifications') || '[]');
-    classifications.unshift(record);
-    localStorage.setItem('classifications', JSON.stringify(classifications));
+  const record = {
+    tweet,
+    category: classification.category,
+    confidence: classification.confidence,
+    timestamp: new Date().toISOString(),
+    emoji: classification.categoryEmoji
+  };
 
-    window.location.href = `result.html?tweet=${encodeURIComponent(tweet)}`;
+  const classifications = JSON.parse(localStorage.getItem('classifications') || '[]');
+  classifications.unshift(record);
+  localStorage.setItem('classifications', JSON.stringify(classifications));
+
+  window.location.href = `result.html?tweet=${encodeURIComponent(tweet)}`;
+}
+
+if (classifyBtn) {
+  classifyBtn.addEventListener('click', () => {
+    handleClassifyAction();
+  });
+}
+
+if (classifyBatchBtn) {
+  classifyBatchBtn.addEventListener('click', () => {
+    handleClassifyAction();
   });
 }
 
