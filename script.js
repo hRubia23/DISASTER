@@ -241,8 +241,39 @@ if (batchFileInput) {
   });
 }
 
+async function classifyTweetWithServer(text) {
+  if (window.location.protocol === 'file:') {
+    return classifyTweet(text);
+  }
+
+  try {
+    const response = await fetch('/api/classify', {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json'
+      },
+      credentials: 'include',
+      body: JSON.stringify({ text })
+    });
+
+    if (!response.ok) {
+      throw new Error('classification failed');
+    }
+
+    const payload = await response.json();
+    if (!payload || !payload.category) {
+      throw new Error('invalid response');
+    }
+
+    return payload;
+  } catch (error) {
+    // Fallback to local heuristic (keeps demo working even if model missing).
+    return classifyTweet(text);
+  }
+}
+
 if (classifyBtn) {
-  classifyBtn.addEventListener('click', () => {
+  classifyBtn.addEventListener('click', async () => {
     const isBatchMode = batchView && !batchView.classList.contains('hidden');
     const batchTweets = JSON.parse(localStorage.getItem('batchTweets') || '[]')
       .map((line) => String(line).trim())
@@ -251,8 +282,8 @@ if (classifyBtn) {
     if (isBatchMode && batchTweets.length > 0) {
       const existing = JSON.parse(localStorage.getItem('classifications') || '[]');
       const now = Date.now();
-      const records = batchTweets.map((tweet, index) => {
-        const classification = classifyTweet(tweet);
+      const records = await Promise.all(batchTweets.map(async (tweet, index) => {
+        const classification = await classifyTweetWithServer(tweet);
         return {
           tweet,
           category: classification.category,
@@ -260,7 +291,7 @@ if (classifyBtn) {
           timestamp: new Date(now + index).toISOString(),
           emoji: classification.categoryEmoji
         };
-      });
+      }));
 
       localStorage.setItem('classifications', JSON.stringify([...records, ...existing]));
 
@@ -273,7 +304,7 @@ if (classifyBtn) {
     }
 
     const tweet = tweetInput.value.trim() || DEFAULT_TWEET;
-    const classification = classifyTweet(tweet);
+    const classification = await classifyTweetWithServer(tweet);
 
     const record = {
       tweet,
@@ -378,47 +409,47 @@ if (tweetPreview) {
   const tweet = params.get('tweet');
   if (tweet) {
     tweetPreview.textContent = tweet;
-    
-    const classification = classifyTweet(tweet);
-    
-    const alertBanner = document.getElementById('alertBanner');
-    if (alertBanner) {
-      alertBanner.className = `urgent-banner ${classification.bannerClass}`;
-    }
-    
-    const bannerTitle = document.getElementById('bannerTitle');
-    if (bannerTitle) {
-      bannerTitle.textContent = classification.bannerTitle;
-    }
-    
-    const bannerMessage = document.getElementById('bannerMessage');
-    if (bannerMessage) {
-      bannerMessage.textContent = classification.bannerMessage;
-    }
-    
-    const detectedSection = document.querySelector('.detected');
-    if (detectedSection) {
-      const badge = detectedSection.querySelector('.badge-red, .badge-yellow, .badge-green, .badge-gray');
-      if (badge) {
-        badge.textContent = `${classification.categoryEmoji} ${classification.category}`;
-        badge.className = `badge ${classification.categoryBadgeClass}`;
+
+    classifyTweetWithServer(tweet).then((classification) => {
+      const alertBanner = document.getElementById('alertBanner');
+      if (alertBanner) {
+        alertBanner.className = `urgent-banner ${classification.bannerClass}`;
       }
-      
-      const confidenceEl = detectedSection.querySelector('strong');
-      if (confidenceEl) {
-        confidenceEl.textContent = `Confidence: ${classification.confidence}%`;
+
+      const bannerTitle = document.getElementById('bannerTitle');
+      if (bannerTitle) {
+        bannerTitle.textContent = classification.bannerTitle;
       }
-    }
-    
-    const descriptionEl = document.querySelector('.detected + p.subtle');
-    if (descriptionEl) {
-      descriptionEl.textContent = classification.description;
-    }
-    
-    const progressBar = document.querySelector('.progress > span');
-    if (progressBar) {
-      progressBar.style.width = `${classification.confidence}%`;
-    }
+
+      const bannerMessage = document.getElementById('bannerMessage');
+      if (bannerMessage) {
+        bannerMessage.textContent = classification.bannerMessage;
+      }
+
+      const detectedSection = document.querySelector('.detected');
+      if (detectedSection) {
+        const badge = detectedSection.querySelector('.badge-red, .badge-yellow, .badge-green, .badge-gray');
+        if (badge) {
+          badge.textContent = `${classification.categoryEmoji} ${classification.category}`;
+          badge.className = `badge ${classification.categoryBadgeClass}`;
+        }
+
+        const confidenceEl = detectedSection.querySelector('strong');
+        if (confidenceEl) {
+          confidenceEl.textContent = `Confidence: ${classification.confidence}%`;
+        }
+      }
+
+      const descriptionEl = document.querySelector('.detected + p.subtle');
+      if (descriptionEl) {
+        descriptionEl.textContent = classification.description;
+      }
+
+      const progressBar = document.querySelector('.progress > span');
+      if (progressBar) {
+        progressBar.style.width = `${classification.confidence}%`;
+      }
+    });
   }
 
   const resultTimestamp = document.getElementById('resultTimestamp');

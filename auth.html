@@ -268,12 +268,34 @@
     transition: border-color 0.2s, box-shadow 0.2s;
   }
 
+  .field select {
+    width: 100%;
+    background: var(--input-bg);
+    border: 1px solid var(--border);
+    border-radius: 9px;
+    padding: 11px 14px;
+    color: var(--text);
+    font-family: 'DM Sans', sans-serif;
+    font-size: 14px;
+    outline: none;
+    transition: border-color 0.2s, box-shadow 0.2s;
+    appearance: none;
+  }
+
   .field input:focus {
     border-color: rgba(239,68,68,0.5);
     box-shadow: 0 0 0 3px rgba(239,68,68,0.08);
   }
 
+  .field select:focus {
+    border-color: rgba(239,68,68,0.5);
+    box-shadow: 0 0 0 3px rgba(239,68,68,0.08);
+  }
+
   .field input::placeholder { color: var(--muted); }
+  .field select:invalid { color: var(--muted); }
+
+  .hidden { display: none !important; }
 
   .row-2 {
     display: grid;
@@ -505,7 +527,20 @@
       </div>
       <div class="field">
         <label for="registerAgency">Organization / Agency</label>
-        <input id="registerAgency" type="text" placeholder="NDRRMC / LGU / NGO"/>
+        <select id="registerAgency" required>
+          <option value="" disabled selected>Select your agency</option>
+          <option value="Zamboanga City DRRMO (ZCDRRMO)">Zamboanga City DRRMO (ZCDRRMO)</option>
+          <option value="Zamboanga City Health Office (CHO)">Zamboanga City Health Office (CHO)</option>
+          <option value="Philippine National Police (PNP) - Zamboanga City">Philippine National Police (PNP) - Zamboanga City</option>
+          <option value="Bureau of Fire Protection (BFP) - Zamboanga City">Bureau of Fire Protection (BFP) - Zamboanga City</option>
+          <option value="Philippine Red Cross - Zamboanga City Chapter">Philippine Red Cross - Zamboanga City Chapter</option>
+          <option value="Barangay LGU - Zamboanga City">Barangay LGU - Zamboanga City</option>
+          <option value="Others">Others</option>
+        </select>
+      </div>
+      <div class="field hidden" id="registerAgencyOtherField">
+        <label for="registerAgencyOther">Specify organization / agency</label>
+        <input id="registerAgencyOther" type="text" placeholder="Type your organization / agency"/>
       </div>
       <div class="row-2">
         <div class="field">

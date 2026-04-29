@@ -60,6 +60,18 @@ Notes:
 
 ---
 
+## ML Classification API (Model-backed)
+
+After you train a model and create `models/model.joblib`, the app will use it for classification.
+
+- **Classify a tweet**: `POST /api/classify` (requires login)
+  - JSON body: `{ "text": "..." }`
+  - Returns: `category`, `confidence`, and UI fields used by the result page (banner, badge, emoji).
+
+If the model file is missing, the API returns **409** with `code: MODEL_MISSING` and the UI will fall back to the built-in keyword heuristic.
+
+---
+
 ## Project Folder Structure (for submission)
 
 - `datasets/`

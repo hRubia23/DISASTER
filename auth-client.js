@@ -4,6 +4,9 @@ const showLoginBtn = document.getElementById('showLoginBtn');
 const showRegisterBtn = document.getElementById('showRegisterBtn');
 const authMessage = document.getElementById('authMessage');
 const switchButtons = document.querySelectorAll('[data-switch-target]');
+const registerAgencySelect = document.getElementById('registerAgency');
+const registerAgencyOtherField = document.getElementById('registerAgencyOtherField');
+const registerAgencyOtherInput = document.getElementById('registerAgencyOther');
 
 function setMessage(message, type = 'info') {
   if (!authMessage) {
@@ -38,6 +41,21 @@ function showRegisterView() {
   showRegisterBtn?.classList.add('active');
   showLoginBtn?.classList.remove('active', 'danger');
   setMessage('');
+}
+
+function syncAgencyOtherVisibility() {
+  if (!registerAgencySelect || !registerAgencyOtherField || !registerAgencyOtherInput) {
+    return;
+  }
+
+  const selected = String(registerAgencySelect.value || '');
+  const isOthers = selected === 'Others';
+
+  registerAgencyOtherField.classList.toggle('hidden', !isOthers);
+  registerAgencyOtherInput.required = isOthers;
+  if (!isOthers) {
+    registerAgencyOtherInput.value = '';
+  }
 }
 
 async function getCurrentUser() {
@@ -99,6 +117,10 @@ switchButtons.forEach((button) => {
   });
 });
 
+if (registerAgencySelect) {
+  registerAgencySelect.addEventListener('change', syncAgencyOtherVisibility);
+}
+
 if (registerForm) {
   registerForm.addEventListener('submit', async (event) => {
     event.preventDefault();
@@ -108,6 +130,9 @@ if (registerForm) {
     const lastName = document.getElementById('registerLastName')?.value.trim() || '';
     const full_name = (fullNameField?.value.trim() || `${firstName} ${lastName}`.trim());
     const email = document.getElementById('registerEmail')?.value.trim();
+    const agencySelected = registerAgencySelect ? String(registerAgencySelect.value || '').trim() : '';
+    const agencyOther = registerAgencyOtherInput ? String(registerAgencyOtherInput.value || '').trim() : '';
+    const organization = agencySelected === 'Others' ? agencyOther : agencySelected;
     const password = document.getElementById('registerPassword')?.value || '';
     const confirmPassword = document.getElementById('registerConfirmPassword')?.value;
 
@@ -116,10 +141,16 @@ if (registerForm) {
       return;
     }
 
+    if (!organization) {
+      setMessage('Please select your organization / agency.', 'error');
+      return;
+    }
+
     try {
-      await requestJson('/api/register', { full_name, email, password });
+      await requestJson('/api/register', { full_name, email, password, organization });
       setMessage('Registration successful. You can now log in.', 'success');
       registerForm.reset();
+      syncAgencyOtherVisibility();
       showLoginView();
     } catch (error) {
       setMessage(error.message, 'error');
@@ -146,6 +177,7 @@ if (loginForm) {
 
 (async () => {
   showLoginView();
+  syncAgencyOtherVisibility();
 
   const user = await getCurrentUser();
   if (user) {
