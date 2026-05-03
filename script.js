@@ -1624,7 +1624,9 @@ if (document.getElementById('historyList')) {
 if (document.getElementById('historyList')) {
   window.addEventListener('storage', (event) => {
     if (event.key === DASHBOARD_REFRESH_KEY) {
-      loadDashboard();
+      authReady.then(() => {
+        loadDashboard();
+      });
     }
   });
 
@@ -1632,7 +1634,9 @@ if (document.getElementById('historyList')) {
     const channel = new BroadcastChannel(DASHBOARD_CHANNEL);
     channel.addEventListener('message', (event) => {
       if (event?.data?.type === 'refresh') {
-        loadDashboard();
+        authReady.then(() => {
+          loadDashboard();
+        });
       }
     });
   }
