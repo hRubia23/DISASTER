@@ -1,0 +1,92 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Post</title>
+  <link rel="stylesheet" href="styles.css" />
+</head>
+<body data-auth-required="true">
+  <div class="page-wrap fade-in">
+    <div class="app-shell">
+      <aside class="side-nav">
+        <div class="brand brand-stack">
+          <div class="alert-logo"></div>
+          <div>
+            <h1>Disaster Tweet Classifier</h1>
+            <span>Post view</span>
+          </div>
+        </div>
+
+        <nav class="nav-stack">
+          <a class="nav-item" href="index.html">Classify</a>
+          <a class="nav-item" href="dashboard.html" data-role="admin">Dashboard</a>
+        </nav>
+
+        <div class="side-meta">
+          <span class="user-greeting" id="userGreeting"></span>
+          <button class="btn btn-outline" id="logoutBtn" type="button">Logout</button>
+        </div>
+      </aside>
+
+      <main class="main-feed">
+        <section class="feed-card post-card">
+          <div class="post-header">
+            <button class="btn btn-outline" id="backBtn" type="button">Back</button>
+            <h2>Post</h2>
+          </div>
+
+          <article class="post-body" id="postBody">
+            <div class="post-author">
+              <div class="feed-avatar">!</div>
+              <div>
+                <div class="feed-title">Disaster Triage</div>
+                <div class="feed-time" id="postTime">Just now</div>
+              </div>
+            </div>
+            <p class="feed-text" id="postText">Loading...</p>
+          </article>
+
+          <div class="post-actions">
+            <button class="icon-btn" type="button" aria-label="Reply">
+              <span class="icon-circle">↩</span>
+            </button>
+            <button class="icon-btn" type="button" aria-label="Repost">
+              <span class="icon-circle">⟲</span>
+            </button>
+            <button class="icon-btn" type="button" aria-label="Like">
+              <span class="icon-circle">♡</span>
+            </button>
+            <button class="icon-btn" type="button" aria-label="Bookmark">
+              <span class="icon-circle">⛶</span>
+            </button>
+            <button class="icon-btn" type="button" aria-label="Share">
+              <span class="icon-circle">⇪</span>
+            </button>
+          </div>
+
+          <div class="post-reply">
+            <div class="feed-avatar">!</div>
+            <input class="reply-input" type="text" placeholder="Post your reply" />
+            <button class="btn btn-secondary" type="button">Reply</button>
+          </div>
+        </section>
+      </main>
+
+      <aside class="side-panel">
+        <section class="card">
+          <h3>Guidelines</h3>
+          <p class="subtle">Keep updates concise and factual.</p>
+          <ol class="steps-compact">
+            <li>Use clear location references when available.</li>
+            <li>Avoid personal identifiers.</li>
+            <li>Prioritize urgency in the first sentence.</li>
+          </ol>
+        </section>
+      </aside>
+    </div>
+  </div>
+
+  <script src="script.js"></script>
+</body>
+</html>

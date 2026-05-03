@@ -14,6 +14,9 @@ const navToggle = document.getElementById('navToggle');
 const topNavLinks = document.querySelector('.top-nav .nav-links');
 const logoutBtn = document.getElementById('logoutBtn');
 const userGreeting = document.getElementById('userGreeting');
+const liveFeed = document.getElementById('liveFeed');
+const feedSeenIds = new Set();
+let currentUserRole = 'viewer';
 
 async function getCurrentSessionUser() {
   if (window.location.protocol === 'file:') {
@@ -49,6 +52,34 @@ async function initAuthGuard() {
     userGreeting.textContent = `Signed in as ${user.full_name}`;
   }
 
+  if (user) {
+    currentUserRole = user.role || 'viewer';
+    document.body.dataset.role = currentUserRole;
+    const adminOnly = document.querySelectorAll('[data-role="admin"]');
+    adminOnly.forEach((el) => {
+      if (user.role !== 'admin') {
+        el.classList.add('hidden');
+      }
+    });
+
+    if (user.role !== 'admin') {
+      batchView?.classList.add('hidden');
+      singleView?.classList.remove('hidden');
+      batchModeBtn?.classList.add('hidden');
+      singleModeBtn?.classList.remove('hidden');
+    }
+
+    if (window.location.pathname.endsWith('dashboard.html') && user.role !== 'admin') {
+      window.location.href = 'index.html';
+      return;
+    }
+
+    if (window.location.pathname.endsWith('result.html') && user.role !== 'admin') {
+      window.location.href = 'index.html';
+      return;
+    }
+  }
+
   if (logoutBtn) {
     logoutBtn.addEventListener('click', async () => {
       try {
@@ -63,6 +94,14 @@ async function initAuthGuard() {
       window.location.href = 'auth.html';
     });
   }
+
+  if (liveFeed) {
+    feedSeenIds.clear();
+    liveFeed.innerHTML = '<p class="feed-empty">No classified tweets yet. Submit one to see it here.</p>';
+    loadLiveFeed();
+  }
+
+  initPostView();
 }
 
 initAuthGuard();
@@ -98,27 +137,255 @@ if (navToggle && topNavLinks) {
 }
 
 function setMode(mode) {
-  if (!singleView || !batchView || !singleModeBtn || !batchModeBtn) {
+  if (!singleView || !batchView) {
+    return;
+  }
+
+  if (mode === 'batch' && currentUserRole !== 'admin') {
     return;
   }
 
   if (mode === 'batch') {
     singleView.classList.add('hidden');
     batchView.classList.remove('hidden');
-    singleModeBtn.classList.remove('btn-primary');
-    singleModeBtn.classList.add('btn-secondary');
-    batchModeBtn.classList.remove('btn-secondary');
-    batchModeBtn.classList.add('btn-primary');
+    if (singleModeBtn) {
+      singleModeBtn.classList.remove('btn-primary');
+      singleModeBtn.classList.add('btn-secondary');
+    }
+    if (batchModeBtn) {
+      batchModeBtn.classList.remove('btn-secondary');
+      batchModeBtn.classList.add('btn-primary');
+    }
     batchView.scrollIntoView({ behavior: 'smooth', block: 'center' });
   } else {
     batchView.classList.add('hidden');
     singleView.classList.remove('hidden');
-    batchModeBtn.classList.remove('btn-primary');
-    batchModeBtn.classList.add('btn-secondary');
-    singleModeBtn.classList.remove('btn-secondary');
-    singleModeBtn.classList.add('btn-primary');
+    if (batchModeBtn) {
+      batchModeBtn.classList.remove('btn-primary');
+      batchModeBtn.classList.add('btn-secondary');
+    }
+    if (singleModeBtn) {
+      singleModeBtn.classList.remove('btn-secondary');
+      singleModeBtn.classList.add('btn-primary');
+    }
     tweetInput?.focus();
   }
+}
+
+function formatRelativeTime(isoString) {
+  if (!isoString) {
+    return 'just now';
+  }
+  const date = new Date(isoString);
+  if (Number.isNaN(date.getTime())) {
+    return 'just now';
+  }
+  const diffMs = Date.now() - date.getTime();
+  const minutes = Math.floor(diffMs / 60000);
+  if (minutes < 1) return 'just now';
+  if (minutes < 60) return `${minutes}m ago`;
+  const hours = Math.floor(minutes / 60);
+  if (hours < 24) return `${hours}h ago`;
+  const days = Math.floor(hours / 24);
+  return `${days}d ago`;
+}
+
+function buildFeedItem(record) {
+  const payload = buildCategoryPayload(record.category, record.confidence);
+  const isAdmin = currentUserRole === 'admin';
+
+  const item = document.createElement('article');
+  item.className = `feed-item${isAdmin ? '' : ' user-view'}`;
+
+  const head = document.createElement('div');
+  head.className = 'feed-item-head';
+
+  const title = document.createElement('div');
+  title.className = 'feed-item-title';
+
+  const avatar = document.createElement('div');
+  avatar.className = 'feed-avatar';
+  avatar.textContent = '!';
+
+  const titleText = document.createElement('div');
+  titleText.innerHTML = `<div class="feed-title">Disaster Triage</div><div class="feed-time">${formatRelativeTime(record.created_at || record.timestamp)}</div>`;
+
+  title.appendChild(avatar);
+  title.appendChild(titleText);
+
+  head.appendChild(title);
+  if (isAdmin) {
+    const chip = document.createElement('span');
+    chip.className = `badge ${payload.categoryBadgeClass}`;
+    chip.textContent = `${payload.categoryEmoji} ${payload.category}`;
+    head.appendChild(chip);
+  }
+
+  const text = document.createElement('p');
+  text.className = 'feed-text';
+  text.textContent = record.tweet;
+
+  const actions = document.createElement('div');
+  actions.className = 'feed-actions';
+
+  if (isAdmin) {
+    const confidence = document.createElement('span');
+    confidence.className = 'feed-confidence';
+    confidence.textContent = `Confidence: ${payload.confidence}%`;
+
+    const viewLink = document.createElement('a');
+    viewLink.className = 'view-link';
+    if (record.classification_id || record.id) {
+      const id = record.classification_id || record.id;
+      viewLink.href = `result.html?id=${encodeURIComponent(id)}&tweet=${encodeURIComponent(record.tweet)}`;
+    } else {
+      viewLink.href = `result.html?tweet=${encodeURIComponent(record.tweet)}`;
+    }
+    viewLink.textContent = 'View details';
+
+    actions.appendChild(confidence);
+    actions.appendChild(viewLink);
+  }
+
+  if (!isAdmin) {
+    item.classList.add('user-post');
+    item.tabIndex = 0;
+    item.setAttribute('role', 'button');
+    const openPost = () => {
+      const id = record.classification_id || record.id;
+      const createdAt = record.created_at || record.timestamp;
+      const url = id
+        ? `post.html?id=${encodeURIComponent(id)}&tweet=${encodeURIComponent(record.tweet)}${createdAt ? `&time=${encodeURIComponent(createdAt)}` : ''}`
+        : `post.html?tweet=${encodeURIComponent(record.tweet)}${createdAt ? `&time=${encodeURIComponent(createdAt)}` : ''}`;
+      window.location.href = url;
+    };
+    item.addEventListener('click', openPost);
+    item.addEventListener('keydown', (event) => {
+      if (event.key === 'Enter' || event.key === ' ') {
+        event.preventDefault();
+        openPost();
+      }
+    });
+  }
+
+  item.appendChild(head);
+  item.appendChild(text);
+  item.appendChild(actions);
+
+  return item;
+}
+
+function getFeedKey(record) {
+  return String(record.classification_id || record.id || `${record.created_at || record.timestamp || ''}:${record.tweet}`);
+}
+
+function prependFeedItems(records) {
+  if (!liveFeed || !records || records.length === 0) {
+    return;
+  }
+  const empty = liveFeed.querySelector('.feed-empty');
+  if (empty) {
+    empty.remove();
+  }
+  records.forEach((record) => {
+    const key = getFeedKey(record);
+    if (feedSeenIds.has(key)) {
+      return;
+    }
+    feedSeenIds.add(key);
+    const node = buildFeedItem(record);
+    liveFeed.prepend(node);
+  });
+  liveFeed.scrollIntoView({ behavior: 'smooth', block: 'start' });
+}
+
+async function loadLiveFeed() {
+  if (!liveFeed) {
+    return;
+  }
+  if (window.location.protocol === 'file:') {
+    const saved = JSON.parse(localStorage.getItem('classifications') || '[]');
+    if (saved.length > 0) {
+      prependFeedItems(saved.slice(0, 10));
+    }
+    return;
+  }
+
+  try {
+    const response = await fetch('/api/history?limit=12', { credentials: 'include' });
+    if (!response.ok) {
+      return;
+    }
+    const payload = await response.json();
+    const items = payload.items || [];
+    if (items.length > 0) {
+      prependFeedItems(items.reverse());
+    }
+  } catch (error) {
+    // Ignore feed errors.
+  }
+}
+
+async function initPostView() {
+  const postBody = document.getElementById('postBody');
+  const postText = document.getElementById('postText');
+  const postTime = document.getElementById('postTime');
+  const backBtn = document.getElementById('backBtn');
+
+  if (!postBody || !postText) {
+    return;
+  }
+
+  if (backBtn) {
+    backBtn.addEventListener('click', () => {
+      if (window.history.length > 1) {
+        window.history.back();
+      } else {
+        window.location.href = 'index.html';
+      }
+    });
+  }
+
+  const params = new URLSearchParams(window.location.search);
+  const tweetParam = params.get('tweet');
+  const timeParam = params.get('time');
+  const idParam = params.get('id');
+
+  if (tweetParam) {
+    postText.textContent = decodeURIComponent(tweetParam);
+  }
+
+  if (timeParam && postTime) {
+    postTime.textContent = formatRelativeTime(timeParam);
+  }
+
+  if (!tweetParam && idParam && window.location.protocol !== 'file:') {
+    try {
+      const response = await fetch(`/api/classifications/${encodeURIComponent(idParam)}`, {
+        credentials: 'include'
+      });
+      if (response.ok) {
+        const payload = await response.json();
+        if (payload?.tweet) {
+          postText.textContent = payload.tweet;
+        }
+        if (payload?.created_at && postTime) {
+          postTime.textContent = formatRelativeTime(payload.created_at);
+        }
+        return;
+      }
+    } catch (error) {
+      // Ignore fetch errors and fall back to empty state.
+    }
+  }
+
+  if (!tweetParam && !idParam) {
+    postText.textContent = 'No post data available.';
+  }
+}
+
+if (liveFeed && window.location.protocol !== 'file:') {
+  setInterval(loadLiveFeed, 15000);
 }
 
 function processBatchFile(file) {
@@ -184,12 +451,6 @@ if (tweetInput) {
       tweetInput.value = button.textContent.trim();
       tweetInput.focus();
     });
-  });
-}
-
-if (singleModeBtn) {
-  singleModeBtn.addEventListener('click', () => {
-    setMode('single');
   });
 }
 
@@ -280,31 +541,70 @@ async function handleClassifyAction() {
     .filter((line) => line.length > 0);
 
   if (isBatchMode && batchTweets.length > 0) {
-    const existing = JSON.parse(localStorage.getItem('classifications') || '[]');
-    const now = Date.now();
-    const records = await Promise.all(batchTweets.map(async (tweet, index) => {
-      const classification = await classifyTweetWithServer(tweet);
-      return {
-        tweet,
-        category: classification.category,
-        confidence: classification.confidence,
-        timestamp: new Date(now + index).toISOString(),
-        emoji: classification.categoryEmoji
-      };
-    }));
+    try {
+      const response = await fetch('/api/classify/batch', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json'
+        },
+        credentials: 'include',
+        body: JSON.stringify({ tweets: batchTweets })
+      });
 
-    localStorage.setItem('classifications', JSON.stringify([...records, ...existing]));
+      if (!response.ok) {
+        throw new Error('batch failed');
+      }
 
-    if (tweetInput) {
-      tweetInput.value = batchTweets[0];
+      const payload = await response.json();
+      const results = payload?.results || [];
+      if (tweetInput && batchTweets.length > 0) {
+        tweetInput.value = batchTweets[0];
+      }
+      if (results.length > 0) {
+        prependFeedItems(results.map((item) => ({
+          tweet: item.tweet,
+          category: item.category,
+          confidence: item.confidence,
+          classification_id: item.classification_id,
+          created_at: new Date().toISOString()
+        })).reverse());
+        return;
+      }
+    } catch (error) {
+      // Fall back to local heuristic + localStorage.
+      const existing = JSON.parse(localStorage.getItem('classifications') || '[]');
+      const now = Date.now();
+      const records = await Promise.all(batchTweets.map(async (tweet, index) => {
+        const classification = await classifyTweetWithServer(tweet);
+        return {
+          tweet,
+          category: classification.category,
+          confidence: classification.confidence,
+          timestamp: new Date(now + index).toISOString(),
+          emoji: classification.categoryEmoji
+        };
+      }));
+      localStorage.setItem('classifications', JSON.stringify([...records, ...existing]));
+      prependFeedItems(records.reverse());
+      return;
     }
-
-    window.location.href = `result.html?tweet=${encodeURIComponent(batchTweets[0])}`;
-    return;
   }
 
   const tweet = (tweetInput?.value || '').trim() || DEFAULT_TWEET;
   const classification = await classifyTweetWithServer(tweet);
+
+  if (classification && classification.classification_id) {
+    prependFeedItems([
+      {
+        tweet,
+        category: classification.category,
+        confidence: classification.confidence,
+        classification_id: classification.classification_id,
+        created_at: new Date().toISOString()
+      }
+    ]);
+    return;
+  }
 
   const record = {
     tweet,
@@ -317,8 +617,7 @@ async function handleClassifyAction() {
   const classifications = JSON.parse(localStorage.getItem('classifications') || '[]');
   classifications.unshift(record);
   localStorage.setItem('classifications', JSON.stringify(classifications));
-
-  window.location.href = `result.html?tweet=${encodeURIComponent(tweet)}`;
+  prependFeedItems([record]);
 }
 
 if (classifyBtn) {
@@ -414,276 +713,414 @@ function classifyTweet(text) {
   };
 }
 
+function buildCategoryPayload(category, confidence) {
+  const normalizedConfidence = Math.max(0, Math.min(99, normalizeConfidence(confidence)));
+  if (category === 'Rescue Request') {
+    return {
+      category,
+      categoryEmoji: '🔴',
+      categoryBadgeClass: 'badge-red',
+      bannerTitle: 'URGENT RESCUE REQUEST DETECTED',
+      bannerMessage: 'This tweet requires immediate attention from emergency responders.',
+      bannerClass: 'banner-red',
+      description: 'Someone needs immediate help.',
+      confidence: normalizedConfidence
+    };
+  }
+  if (category === 'Damage Report') {
+    return {
+      category,
+      categoryEmoji: '🟡',
+      categoryBadgeClass: 'badge-yellow',
+      bannerTitle: 'DAMAGE REPORT DETECTED',
+      bannerMessage: 'Infrastructure or property damage has been reported.',
+      bannerClass: 'banner-yellow',
+      description: 'Infrastructure/property damage info.',
+      confidence: normalizedConfidence
+    };
+  }
+  if (category === 'Safety Update') {
+    return {
+      category,
+      categoryEmoji: '🟢',
+      categoryBadgeClass: 'badge-green',
+      bannerTitle: 'SAFETY UPDATE RECEIVED',
+      bannerMessage: 'Evacuation notices and relief distribution information.',
+      bannerClass: 'banner-green',
+      description: 'Evacuation notices, relief distribution.',
+      confidence: normalizedConfidence
+    };
+  }
+  return {
+    category: 'General Information',
+    categoryEmoji: '⚪',
+    categoryBadgeClass: 'badge-gray',
+    bannerTitle: 'INFORMATION RECEIVED',
+    bannerMessage: 'This is general information that may be useful for reference.',
+    bannerClass: 'banner-gray',
+    description: 'Non-urgent news and updates.',
+    confidence: normalizedConfidence
+  };
+}
+
+function normalizeConfidence(value) {
+  const num = Number(value) || 0;
+  if (num <= 1) {
+    return Math.round(num * 1000) / 10;
+  }
+  return Math.round(num * 10) / 10;
+}
+
 const tweetPreview = document.getElementById('tweetPreview');
 if (tweetPreview) {
   const params = new URLSearchParams(window.location.search);
   const tweet = params.get('tweet');
+  const classificationId = params.get('id');
+
   if (tweet) {
     tweetPreview.textContent = tweet;
-
-    classifyTweetWithServer(tweet).then((classification) => {
-      const alertBanner = document.getElementById('alertBanner');
-      if (alertBanner) {
-        alertBanner.className = `urgent-banner ${classification.bannerClass}`;
-      }
-
-      const bannerTitle = document.getElementById('bannerTitle');
-      if (bannerTitle) {
-        bannerTitle.textContent = classification.bannerTitle;
-      }
-
-      const bannerMessage = document.getElementById('bannerMessage');
-      if (bannerMessage) {
-        bannerMessage.textContent = classification.bannerMessage;
-      }
-
-      const detectedSection = document.querySelector('.detected');
-      if (detectedSection) {
-        const badge = detectedSection.querySelector('.badge-red, .badge-yellow, .badge-green, .badge-gray');
-        if (badge) {
-          badge.textContent = `${classification.categoryEmoji} ${classification.category}`;
-          badge.className = `badge ${classification.categoryBadgeClass}`;
-        }
-
-        const confidenceEl = detectedSection.querySelector('strong');
-        if (confidenceEl) {
-          confidenceEl.textContent = `Confidence: ${classification.confidence}%`;
-        }
-      }
-
-      const descriptionEl = document.querySelector('.detected + p.subtle');
-      if (descriptionEl) {
-        descriptionEl.textContent = classification.description;
-      }
-
-      const progressBar = document.querySelector('.progress > span');
-      if (progressBar) {
-        progressBar.style.width = `${classification.confidence}%`;
-      }
-    });
   }
+
+  const updateResultUI = (classification) => {
+    if (!classification) {
+      return;
+    }
+
+    const alertBanner = document.getElementById('alertBanner');
+    if (alertBanner) {
+      alertBanner.className = `urgent-banner ${classification.bannerClass}`;
+    }
+
+    const bannerTitle = document.getElementById('bannerTitle');
+    if (bannerTitle) {
+      bannerTitle.textContent = classification.bannerTitle;
+    }
+
+    const bannerMessage = document.getElementById('bannerMessage');
+    if (bannerMessage) {
+      bannerMessage.textContent = classification.bannerMessage;
+    }
+
+    const detectedSection = document.querySelector('.detected');
+    if (detectedSection) {
+      const badge = detectedSection.querySelector('.badge-red, .badge-yellow, .badge-green, .badge-gray');
+      if (badge) {
+        badge.textContent = `${classification.categoryEmoji} ${classification.category}`;
+        badge.className = `badge ${classification.categoryBadgeClass}`;
+      }
+
+      const confidenceEl = detectedSection.querySelector('strong');
+      if (confidenceEl) {
+        confidenceEl.textContent = `Confidence: ${classification.confidence}%`;
+      }
+    }
+
+    const descriptionEl = document.querySelector('.detected + p.subtle');
+    if (descriptionEl) {
+      descriptionEl.textContent = classification.description;
+    }
+
+    const progressBar = document.querySelector('.progress > span');
+    if (progressBar) {
+      progressBar.style.width = `${classification.confidence}%`;
+    }
+  };
 
   const resultTimestamp = document.getElementById('resultTimestamp');
   if (resultTimestamp) {
     const now = new Date();
     resultTimestamp.textContent = `Classified at: ${now.toLocaleDateString()} ${now.toLocaleTimeString()}`;
   }
+
+  if (classificationId && window.location.protocol !== 'file:') {
+    fetch(`/api/classifications/${classificationId}`, { credentials: 'include' })
+      .then((response) => response.ok ? response.json() : null)
+      .then((record) => {
+        if (!record) {
+          return null;
+        }
+        const payload = buildCategoryPayload(record.category, record.confidence);
+        updateResultUI(payload);
+        const flagBtn = document.getElementById('flagBtn');
+        if (flagBtn) {
+          flagBtn.dataset.classificationId = String(record.id);
+        }
+        return record;
+      })
+      .catch(() => {
+        if (tweet) {
+          classifyTweetWithServer(tweet).then(updateResultUI);
+        }
+      });
+  } else if (tweet) {
+    classifyTweetWithServer(tweet).then(updateResultUI);
+  }
 }
 
 const pieCanvas = document.getElementById('pieChart');
 const barCanvas = document.getElementById('barChart');
+let pieChartInstance = null;
+let barChartInstance = null;
 
-if (pieCanvas && barCanvas && window.Chart) {
-  const classifications = JSON.parse(localStorage.getItem('classifications') || '[]');
-  
-  let categoryCount = {
-    'Rescue Request': 0,
-    'Damage Report': 0,
-    'Safety Update': 0,
-    'General Information': 0
-  };
-  
-  classifications.forEach(c => {
-    if (categoryCount.hasOwnProperty(c.category)) {
-      categoryCount[c.category]++;
-    }
-  });
-  
+function buildHistoryItem(item) {
+  const date = new Date(item.created_at || item.timestamp || Date.now());
+  const dateStr = date.toLocaleDateString();
+  const timeStr = date.toLocaleTimeString();
+
+  let chipClass = 'chip-urgent';
+  if (item.category === 'Damage Report') {
+    chipClass = 'chip-warning';
+  } else if (item.category === 'Safety Update') {
+    chipClass = 'chip-info';
+  } else if (item.category === 'General Information') {
+    chipClass = 'chip-neutral';
+  }
+
+  let badgeClass = 'badge-red';
+  if (item.category === 'Damage Report') {
+    badgeClass = 'badge-yellow';
+  } else if (item.category === 'Safety Update') {
+    badgeClass = 'badge-green';
+  } else if (item.category === 'General Information') {
+    badgeClass = 'badge-gray';
+  }
+
+  const chipText = item.category === 'Rescue Request' ? 'URGENT' : item.category.toUpperCase();
+  const shortTweet = item.tweet.length > 100 ? `${item.tweet.substring(0, 100)}...` : item.tweet;
+
+  const historyItem = document.createElement('article');
+  historyItem.className = 'history-item';
+
+  const top = document.createElement('div');
+  top.className = 'history-top';
+
+  const chip = document.createElement('span');
+  chip.className = chipClass;
+  chip.textContent = chipText;
+
+  const dateMeta = document.createElement('span');
+  dateMeta.className = 'meta';
+  dateMeta.textContent = `${dateStr}, ${timeStr}`;
+
+  top.appendChild(chip);
+  top.appendChild(dateMeta);
+
+  const tweetText = document.createElement('div');
+  tweetText.textContent = shortTweet;
+
+  const meta = document.createElement('div');
+  meta.className = 'meta';
+
+  const badge = document.createElement('span');
+  badge.className = `badge ${badgeClass}`;
+  badge.textContent = `${item.emoji || '⚪'} ${item.category}`;
+
+  const confidence = document.createElement('strong');
+  confidence.textContent = `${normalizeConfidence(item.confidence)}%`;
+
+  const viewLink = document.createElement('a');
+  viewLink.className = 'view-link';
+  if (item.id) {
+    viewLink.href = `result.html?id=${encodeURIComponent(item.id)}&tweet=${encodeURIComponent(item.tweet)}`;
+  } else {
+    viewLink.href = `result.html?tweet=${encodeURIComponent(item.tweet)}`;
+  }
+  viewLink.textContent = 'View details';
+
+  meta.appendChild(badge);
+  meta.appendChild(confidence);
+  meta.appendChild(viewLink);
+
+  historyItem.appendChild(top);
+  historyItem.appendChild(tweetText);
+  historyItem.appendChild(meta);
+
+  return historyItem;
+}
+
+function renderCharts(categoryCount) {
+  if (!pieCanvas || !barCanvas || !window.Chart) {
+    return;
+  }
+
   const total = Object.values(categoryCount).reduce((sum, count) => sum + count, 0);
   const rescuePercent = total > 0 ? Math.round((categoryCount['Rescue Request'] / total) * 100) : 0;
   const damagePercent = total > 0 ? Math.round((categoryCount['Damage Report'] / total) * 100) : 0;
   const safetyPercent = total > 0 ? Math.round((categoryCount['Safety Update'] / total) * 100) : 0;
   const generalPercent = total > 0 ? Math.round((categoryCount['General Information'] / total) * 100) : 0;
-  
-  const pieCtx = pieCanvas.getContext('2d');
-  const barCtx = barCanvas.getContext('2d');
 
-  new Chart(pieCtx, {
-    type: 'pie',
-    data: {
-      labels: ['Rescue', 'Damage', 'Safety', 'General'],
-      datasets: [{
-        data: [rescuePercent, damagePercent, safetyPercent, generalPercent],
-        backgroundColor: ['#d1292d', '#f5c84c', '#1f9d62', '#9aa3af'],
-        borderColor: ['#ffffff'],
-        borderWidth: 2
-      }]
-    },
-    options: {
-      plugins: {
-        legend: {
-          position: 'bottom'
-        },
-        tooltip: {
-          callbacks: {
-            label(context) {
-              return `${context.label}: ${context.parsed}%`;
+  const pieData = [rescuePercent, damagePercent, safetyPercent, generalPercent];
+  const barData = [
+    categoryCount['Rescue Request'],
+    categoryCount['Damage Report'],
+    categoryCount['Safety Update'],
+    categoryCount['General Information']
+  ];
+
+  if (!pieChartInstance) {
+    pieChartInstance = new Chart(pieCanvas.getContext('2d'), {
+      type: 'pie',
+      data: {
+        labels: ['Rescue', 'Damage', 'Safety', 'General'],
+        datasets: [{
+          data: pieData,
+          backgroundColor: ['#d1292d', '#f5c84c', '#1f9d62', '#9aa3af'],
+          borderColor: ['#ffffff'],
+          borderWidth: 2
+        }]
+      },
+      options: {
+        plugins: {
+          legend: {
+            position: 'bottom'
+          },
+          tooltip: {
+            callbacks: {
+              label(context) {
+                return `${context.label}: ${context.parsed}%`;
+              }
             }
           }
         }
       }
-    }
-  });
+    });
+  } else {
+    pieChartInstance.data.datasets[0].data = pieData;
+    pieChartInstance.update();
+  }
 
-  new Chart(barCtx, {
-    type: 'bar',
-    data: {
-      labels: ['Rescue', 'Damage', 'Safety', 'General'],
-      datasets: [{
-        label: 'Tweets',
-        data: [
-          categoryCount['Rescue Request'],
-          categoryCount['Damage Report'],
-          categoryCount['Safety Update'],
-          categoryCount['General Information']
-        ],
-        backgroundColor: ['#d1292d', '#f5c84c', '#1f9d62', '#9aa3af'],
-        borderRadius: 8
-      }]
-    },
-    options: {
-      scales: {
-        y: {
-          beginAtZero: true,
-          ticks: {
-            precision: 0,
-            stepSize: 1
+  if (!barChartInstance) {
+    barChartInstance = new Chart(barCanvas.getContext('2d'), {
+      type: 'bar',
+      data: {
+        labels: ['Rescue', 'Damage', 'Safety', 'General'],
+        datasets: [{
+          label: 'Tweets',
+          data: barData,
+          backgroundColor: ['#d1292d', '#f5c84c', '#1f9d62', '#9aa3af'],
+          borderRadius: 8
+        }]
+      },
+      options: {
+        scales: {
+          y: {
+            beginAtZero: true,
+            ticks: {
+              precision: 0,
+              stepSize: 1
+            },
+            grid: {
+              color: '#e6ecf2'
+            }
           },
-          grid: {
-            color: '#e6ecf2'
+          x: {
+            grid: {
+              display: false
+            }
           }
         },
-        x: {
-          grid: {
+        plugins: {
+          legend: {
             display: false
           }
         }
-      },
-      plugins: {
-        legend: {
-          display: false
-        }
       }
-    }
-  });
+    });
+  } else {
+    barChartInstance.data.datasets[0].data = barData;
+    barChartInstance.update();
+  }
 }
 
-function loadDashboard() {
+async function loadDashboard() {
   const totalCountEl = document.getElementById('totalCount');
   const rescueCountEl = document.getElementById('rescueCount');
   const avgConfidenceEl = document.getElementById('avgConfidence');
   const safetyCountEl = document.getElementById('safetyCount');
   const historyListEl = document.getElementById('historyList');
-  
+
   if (!totalCountEl || !historyListEl) {
     return;
   }
-  
-  const classifications = JSON.parse(localStorage.getItem('classifications') || '[]');
-  
-  if (classifications.length === 0) {
+
+  let items = [];
+  let statsPayload = null;
+
+  if (window.location.protocol !== 'file:') {
+    try {
+      const [statsResponse, historyResponse] = await Promise.all([
+        fetch('/api/stats', { credentials: 'include' }),
+        fetch('/api/history?limit=200', { credentials: 'include' })
+      ]);
+      if (statsResponse.ok && historyResponse.ok) {
+        statsPayload = await statsResponse.json();
+        const historyPayload = await historyResponse.json();
+        items = historyPayload.items || [];
+      }
+    } catch (error) {
+      // Ignore and fall back to local storage.
+    }
+  }
+
+  if (!statsPayload) {
+    const classifications = JSON.parse(localStorage.getItem('classifications') || '[]');
+    items = classifications;
+    let totalConfidence = 0;
+    const byCategory = {
+      'Rescue Request': 0,
+      'Damage Report': 0,
+      'Safety Update': 0,
+      'General Information': 0
+    };
+    classifications.forEach(c => {
+      if (byCategory.hasOwnProperty(c.category)) {
+        byCategory[c.category]++;
+      }
+      totalConfidence += c.confidence || 0;
+    });
+    const total = classifications.length;
+    const avgConfidence = total > 0 ? Math.round((totalConfidence / total) * 10) / 10 : 0;
+    statsPayload = {
+      total,
+      avg_confidence: avgConfidence,
+      by_category: byCategory
+    };
+  }
+
+  if (items.length === 0) {
     historyListEl.innerHTML = '<p style="text-align: center; color: #9aa3af; padding: 20px;">No classifications yet. Start by classifying a tweet!</p>';
+    renderCharts({
+      'Rescue Request': 0,
+      'Damage Report': 0,
+      'Safety Update': 0,
+      'General Information': 0
+    });
     return;
   }
-  
-  let categoryCount = {
+
+  const categoryCount = {
     'Rescue Request': 0,
     'Damage Report': 0,
     'Safety Update': 0,
     'General Information': 0
   };
-  
-  let totalConfidence = 0;
-  
-  classifications.forEach(c => {
-    if (categoryCount.hasOwnProperty(c.category)) {
-      categoryCount[c.category]++;
+  Object.entries(statsPayload.by_category || {}).forEach(([key, value]) => {
+    if (categoryCount.hasOwnProperty(key)) {
+      categoryCount[key] = value;
     }
-    totalConfidence += c.confidence || 0;
   });
-  
-  const total = classifications.length;
-  const avgConfidence = total > 0 ? Math.round((totalConfidence / total) * 10) / 10 : 0;
-  
-  if (totalCountEl) totalCountEl.textContent = total;
-  if (rescueCountEl) rescueCountEl.textContent = categoryCount['Rescue Request'];
-  if (avgConfidenceEl) avgConfidenceEl.textContent = `${avgConfidence}%`;
-  if (safetyCountEl) safetyCountEl.textContent = categoryCount['Safety Update'];
-  
+
+  totalCountEl.textContent = statsPayload.total || 0;
+  rescueCountEl.textContent = categoryCount['Rescue Request'] || 0;
+  avgConfidenceEl.textContent = `${statsPayload.avg_confidence || 0}%`;
+  safetyCountEl.textContent = categoryCount['Safety Update'] || 0;
+
   historyListEl.innerHTML = '';
-  
-  classifications.forEach(c => {
-    const date = new Date(c.timestamp);
-    const dateStr = date.toLocaleDateString();
-    const timeStr = date.toLocaleTimeString();
-    
-    let chipClass = 'chip-urgent';
-    if (c.category === 'Damage Report') {
-      chipClass = 'chip-warning';
-    } else if (c.category === 'Safety Update') {
-      chipClass = 'chip-info';
-    } else if (c.category === 'General Information') {
-      chipClass = 'chip-neutral';
-    }
-    
-    let badgeClass = 'badge-red';
-    if (c.category === 'Damage Report') {
-      badgeClass = 'badge-yellow';
-    } else if (c.category === 'Safety Update') {
-      badgeClass = 'badge-green';
-    } else if (c.category === 'General Information') {
-      badgeClass = 'badge-gray';
-    }
-    
-    const chipText = c.category === 'Rescue Request' ? 'URGENT' : c.category.toUpperCase();
-    
-    const shortTweet = c.tweet.length > 100 ? c.tweet.substring(0, 100) + '...' : c.tweet;
-    
-    const historyItem = document.createElement('article');
-    historyItem.className = 'history-item';
-
-    const top = document.createElement('div');
-    top.className = 'history-top';
-
-    const chip = document.createElement('span');
-    chip.className = chipClass;
-    chip.textContent = chipText;
-
-    const dateMeta = document.createElement('span');
-    dateMeta.className = 'meta';
-    dateMeta.textContent = `${dateStr}, ${timeStr}`;
-
-    top.appendChild(chip);
-    top.appendChild(dateMeta);
-
-    const tweetText = document.createElement('div');
-    tweetText.textContent = shortTweet;
-
-    const meta = document.createElement('div');
-    meta.className = 'meta';
-
-    const badge = document.createElement('span');
-    badge.className = `badge ${badgeClass}`;
-    badge.textContent = `${c.emoji || '⚪'} ${c.category}`;
-
-    const confidence = document.createElement('strong');
-    confidence.textContent = `${c.confidence}%`;
-
-    const viewLink = document.createElement('a');
-    viewLink.className = 'view-link';
-    viewLink.href = `result.html?tweet=${encodeURIComponent(c.tweet)}`;
-    viewLink.textContent = 'View details';
-
-    meta.appendChild(badge);
-    meta.appendChild(confidence);
-    meta.appendChild(viewLink);
-
-    historyItem.appendChild(top);
-    historyItem.appendChild(tweetText);
-    historyItem.appendChild(meta);
-
-    historyListEl.appendChild(historyItem);
+  items.forEach((item) => {
+    historyListEl.appendChild(buildHistoryItem(item));
   });
+
+  renderCharts(categoryCount);
 }
 
 if (document.getElementById('historyList')) {
@@ -692,11 +1129,17 @@ if (document.getElementById('historyList')) {
 
 const clearAllBtn = document.getElementById('clearAllBtn');
 if (clearAllBtn) {
-  clearAllBtn.addEventListener('click', () => {
-    if (confirm('Are you sure you want to clear all classifications? This cannot be undone.')) {
+  clearAllBtn.addEventListener('click', async () => {
+    if (!confirm('Are you sure you want to clear all classifications? This cannot be undone.')) {
+      return;
+    }
+    if (window.location.protocol === 'file:') {
       localStorage.removeItem('classifications');
       window.location.reload();
+      return;
     }
+    await fetch('/api/history/clear', { method: 'POST', credentials: 'include' });
+    window.location.reload();
   });
 }
 
@@ -707,33 +1150,65 @@ function toCsvValue(value) {
 
 const exportCsvBtn = document.getElementById('exportCsvBtn');
 if (exportCsvBtn) {
-  exportCsvBtn.addEventListener('click', () => {
-    const classifications = JSON.parse(localStorage.getItem('classifications') || '[]');
+  exportCsvBtn.addEventListener('click', async () => {
+    if (window.location.protocol === 'file:') {
+      const classifications = JSON.parse(localStorage.getItem('classifications') || '[]');
+      if (classifications.length === 0) {
+        alert('No classifications available to export yet.');
+        return;
+      }
+      const header = ['tweet', 'category', 'confidence', 'timestamp', 'emoji'];
+      const rows = classifications.map((item) => [
+        toCsvValue(item.tweet),
+        toCsvValue(item.category),
+        toCsvValue(item.confidence),
+        toCsvValue(item.timestamp),
+        toCsvValue(item.emoji)
+      ]);
 
-    if (classifications.length === 0) {
-      alert('No classifications available to export yet.');
+      const csv = [header.join(','), ...rows.map((row) => row.join(','))].join('\n');
+      const blob = new Blob([csv], { type: 'text/csv;charset=utf-8;' });
+      const url = URL.createObjectURL(blob);
+      const link = document.createElement('a');
+      link.href = url;
+      link.download = `disaster-tweet-classifications-${new Date().toISOString().slice(0, 10)}.csv`;
+      document.body.appendChild(link);
+      link.click();
+      link.remove();
+      URL.revokeObjectURL(url);
       return;
     }
 
-    const header = ['tweet', 'category', 'confidence', 'timestamp', 'emoji'];
-    const rows = classifications.map((item) => [
-      toCsvValue(item.tweet),
-      toCsvValue(item.category),
-      toCsvValue(item.confidence),
-      toCsvValue(item.timestamp),
-      toCsvValue(item.emoji)
-    ]);
+    window.location.href = '/api/export/csv';
+  });
+}
 
-    const csv = [header.join(','), ...rows.map((row) => row.join(','))].join('\n');
-    const blob = new Blob([csv], { type: 'text/csv;charset=utf-8;' });
-    const url = URL.createObjectURL(blob);
+const exportPdfBtn = document.getElementById('exportPdfBtn');
+if (exportPdfBtn) {
+  exportPdfBtn.addEventListener('click', () => {
+    if (window.location.protocol === 'file:') {
+      alert('PDF export is only available when running the server.');
+      return;
+    }
+    window.location.href = '/api/export/pdf';
+  });
+}
 
-    const link = document.createElement('a');
-    link.href = url;
-    link.download = `disaster-tweet-classifications-${new Date().toISOString().slice(0, 10)}.csv`;
-    document.body.appendChild(link);
-    link.click();
-    link.remove();
-    URL.revokeObjectURL(url);
+const flagBtn = document.getElementById('flagBtn');
+if (flagBtn) {
+  flagBtn.addEventListener('click', async () => {
+    const id = flagBtn.dataset.classificationId;
+    if (!id) {
+      alert('Classification record not found.');
+      return;
+    }
+    const reason = prompt('Reason for flagging (optional):', 'Needs review') || 'Needs review';
+    await fetch('/api/flag', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      credentials: 'include',
+      body: JSON.stringify({ classification_id: Number(id), reason })
+    });
+    alert('Flag recorded.');
   });
 }
