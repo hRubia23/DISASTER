@@ -109,7 +109,7 @@ async function initAuthGuard() {
   initPostView();
 }
 
-initAuthGuard();
+const authReady = initAuthGuard();
 
 function syncMobileNavState() {
   if (!navToggle || !topNavLinks) {
@@ -1546,7 +1546,9 @@ async function loadDashboard() {
 }
 
 if (document.getElementById('historyList')) {
-  loadDashboard();
+  authReady.then(() => {
+    loadDashboard();
+  });
 }
 
 const clearAllBtn = document.getElementById('clearAllBtn');
