@@ -1469,9 +1469,10 @@ async function loadDashboard() {
 
   if (window.location.protocol !== 'file:') {
     try {
+      const scopeParam = currentUserRole === 'admin' ? 'all' : 'mine';
       const [statsResponse, historyResponse] = await Promise.all([
-        fetch('/api/stats', { credentials: 'include' }),
-        fetch('/api/history?limit=200', { credentials: 'include' })
+        fetch(`/api/stats?scope=${scopeParam}`, { credentials: 'include' }),
+        fetch(`/api/history?limit=200&scope=${scopeParam}`, { credentials: 'include' })
       ]);
       if (statsResponse.ok && historyResponse.ok) {
         statsPayload = await statsResponse.json();
@@ -1484,7 +1485,7 @@ async function loadDashboard() {
   }
 
   if (!statsPayload) {
-    const classifications = JSON.parse(localStorage.getItem('classifications') || '[]');
+    const classifications = readLocalClassifications();
     items = classifications;
     let totalConfidence = 0;
     const byCategory = {
