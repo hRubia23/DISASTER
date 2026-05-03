@@ -485,7 +485,7 @@ def history():
             FROM classifications c
             JOIN users u ON u.id = c.user_id
             WHERE c.user_id = ?
-            ORDER BY id DESC
+            ORDER BY c.id DESC
             LIMIT ?
             """,
             (user_id, user_id, user_id, limit),
