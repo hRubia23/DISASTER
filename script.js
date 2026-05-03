@@ -20,6 +20,7 @@ let currentUserRole = 'viewer';
 let currentUserName = '';
 let currentUserId = null;
 const LEGACY_STORAGE_KEY = 'classifications';
+const DASHBOARD_REFRESH_KEY = 'dashboard_refresh';
 
 async function getCurrentSessionUser() {
   if (window.location.protocol === 'file:') {
@@ -593,6 +594,14 @@ function mergeFeedItems(serverItems, localItems) {
   return combined;
 }
 
+function notifyDashboardRefresh() {
+  try {
+    localStorage.setItem(DASHBOARD_REFRESH_KEY, String(Date.now()));
+  } catch (error) {
+    // Ignore storage errors.
+  }
+}
+
 function prependFeedItems(records) {
   if (!liveFeed || !records || records.length === 0) {
     return;
@@ -1036,6 +1045,7 @@ async function handleClassifyAction() {
         }));
         records.forEach((record) => storeLocalClassification(record));
         prependFeedItems(records.reverse());
+        notifyDashboardRefresh();
         return;
       }
     } catch (error) {
@@ -1054,6 +1064,7 @@ async function handleClassifyAction() {
       }));
       records.forEach((record) => storeLocalClassification(record));
       prependFeedItems(records.reverse());
+      notifyDashboardRefresh();
       return;
     }
   }
@@ -1072,6 +1083,7 @@ async function handleClassifyAction() {
     };
     storeLocalClassification(record);
     prependFeedItems([record]);
+    notifyDashboardRefresh();
     return;
   }
 
@@ -1085,6 +1097,7 @@ async function handleClassifyAction() {
 
   storeLocalClassification(record);
   prependFeedItems([record]);
+  notifyDashboardRefresh();
 }
 
 if (classifyBtn) {
@@ -1594,7 +1607,14 @@ async function loadDashboard() {
 if (document.getElementById('historyList')) {
   authReady.then(() => {
     loadDashboard();
-    setInterval(loadDashboard, 15000);
+  });
+}
+
+if (document.getElementById('historyList')) {
+  window.addEventListener('storage', (event) => {
+    if (event.key === DASHBOARD_REFRESH_KEY) {
+      loadDashboard();
+    }
   });
 }
 
