@@ -366,32 +366,11 @@ async function handleToggleAction(record, action, btn) {
 
 async function handleReplyAction(record, btn) {
   const id = record.classification_id || record.id;
-  if (!id || window.location.protocol === 'file:') {
-    return;
-  }
-
-  const reply = window.prompt('Write a reply');
-  if (!reply) {
-    return;
-  }
-
-  try {
-    const response = await fetch(`/api/classifications/${encodeURIComponent(id)}/reply`, {
-      method: 'POST',
-      headers: {
-        'Content-Type': 'application/json'
-      },
-      credentials: 'include',
-      body: JSON.stringify({ reply })
-    });
-    if (!response.ok) {
-      return;
-    }
-    const payload = await response.json();
-    updateFeedActionButton(btn, payload.reply_count, false);
-  } catch (error) {
-    // Ignore reply errors.
-  }
+  const createdAt = record.created_at || record.timestamp;
+  const url = id
+    ? `post.html?id=${encodeURIComponent(id)}&tweet=${encodeURIComponent(record.tweet)}${createdAt ? `&time=${encodeURIComponent(createdAt)}` : ''}&focus=reply`
+    : `post.html?tweet=${encodeURIComponent(record.tweet)}${createdAt ? `&time=${encodeURIComponent(createdAt)}` : ''}&focus=reply`;
+  window.location.href = url;
 }
 
 async function handleShareAction(record) {
@@ -447,13 +426,13 @@ async function handlePostToggleAction(record, action, countEl, btnEl) {
   }
 }
 
-async function handlePostReplyAction(record, countEl) {
+async function handlePostReplyAction(record, countEl, replyText) {
   const id = record.classification_id || record.id;
   if (!id || window.location.protocol === 'file:') {
     return;
   }
 
-  const reply = window.prompt('Write a reply');
+  const reply = String(replyText || '').trim();
   if (!reply) {
     return;
   }
@@ -557,6 +536,7 @@ async function initPostView() {
   const tweetParam = params.get('tweet');
   const timeParam = params.get('time');
   const idParam = params.get('id');
+  const focusParam = params.get('focus');
   const postRecord = { id: idParam };
 
   const setDisabled = (disabled) => {
@@ -601,7 +581,9 @@ async function initPostView() {
       button.addEventListener('click', () => handlePostToggleAction(postRecord, 'repost', countEl, button));
     }
     if (action === 'reply') {
-      button.addEventListener('click', () => handlePostReplyAction(postRecord, countEl));
+      button.addEventListener('click', () => {
+        replyInput?.focus();
+      });
     }
     if (action === 'share') {
       button.addEventListener('click', () => handleShareAction(postRecord));
@@ -611,8 +593,25 @@ async function initPostView() {
   if (replySubmit) {
     replySubmit.addEventListener('click', () => {
       const countEl = document.querySelector('.post-action-count[data-action="reply"]');
-      handlePostReplyAction(postRecord, countEl);
+      const replyText = replyInput?.value || '';
+      handlePostReplyAction(postRecord, countEl, replyText);
+      if (replyInput) {
+        replyInput.value = '';
+      }
     });
+  }
+
+  if (replyInput) {
+    replyInput.addEventListener('keydown', (event) => {
+      if (event.key === 'Enter') {
+        event.preventDefault();
+        replySubmit?.click();
+      }
+    });
+  }
+
+  if (focusParam === 'reply') {
+    replyInput?.focus();
   }
 
   if (!tweetParam && idParam && window.location.protocol !== 'file:') {
