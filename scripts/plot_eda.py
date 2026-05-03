@@ -19,18 +19,26 @@ def main() -> int:
         return 2
 
     df = pd.read_csv(DATASET_PATH)
-    if "text" not in df.columns or "target" not in df.columns:
-        raise SystemExit("Dataset must contain columns: text, target")
+    if "text" not in df.columns:
+        raise SystemExit("Dataset must contain column: text")
+
+    label_col = None
+    for candidate in ("label", "category"):
+        if candidate in df.columns:
+            label_col = candidate
+            break
+    if not label_col:
+        raise SystemExit("Dataset must contain column: label or category")
 
     df["text"] = df["text"].astype(str)
-    df["target"] = pd.to_numeric(df["target"], errors="coerce")
+    df[label_col] = df[label_col].astype(str)
 
     # Class distribution
-    counts = df["target"].value_counts(dropna=False).sort_index()
+    counts = df[label_col].value_counts(dropna=False).sort_index()
     plt.figure(figsize=(6, 4))
-    plt.title("Class distribution (target)")
-    plt.bar([str(i) for i in counts.index], counts.values, color=["#9aa3af", "#d1292d"])
-    plt.xlabel("target")
+    plt.title("Class distribution (label)")
+    plt.bar([str(i) for i in counts.index], counts.values, color="#d1292d")
+    plt.xlabel("label")
     plt.ylabel("count")
     plt.tight_layout()
     out1 = OUTPUT_DIR / "class_distribution.png"

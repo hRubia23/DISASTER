@@ -28,11 +28,19 @@ def main() -> int:
         return 2
 
     df = pd.read_csv(DATASET_PATH)
-    if "text" not in df.columns or "target" not in df.columns:
-        raise SystemExit("Dataset must contain columns: text, target")
+    if "text" not in df.columns:
+        raise SystemExit("Dataset must contain column: text")
+
+    label_col = None
+    for candidate in ("label", "category"):
+        if candidate in df.columns:
+            label_col = candidate
+            break
+    if not label_col:
+        raise SystemExit("Dataset must contain column: label or category")
 
     X = df["text"].astype(str).fillna("")
-    y = pd.to_numeric(df["target"], errors="coerce").fillna(0).astype(int)
+    y = df[label_col].astype(str).fillna("")
 
     X_train, X_test, y_train, y_test = train_test_split(
         X, y, test_size=0.2, random_state=42, stratify=y if y.nunique() > 1 else None
@@ -45,9 +53,10 @@ def main() -> int:
     report_path = OUTPUT_DIR / "classification_report.txt"
     report_path.write_text(report, encoding="utf-8")
 
-    cm = confusion_matrix(y_test, y_pred, labels=[0, 1])
-    disp = ConfusionMatrixDisplay(confusion_matrix=cm, display_labels=["not_disaster(0)", "disaster(1)"])
-    fig, ax = plt.subplots(figsize=(6, 5))
+    labels = sorted(y.unique())
+    cm = confusion_matrix(y_test, y_pred, labels=labels)
+    disp = ConfusionMatrixDisplay(confusion_matrix=cm, display_labels=labels)
+    fig, ax = plt.subplots(figsize=(7, 6))
     disp.plot(ax=ax, cmap="Blues", values_format="d", colorbar=False)
     ax.set_title("Confusion Matrix")
     plt.tight_layout()

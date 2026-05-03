@@ -40,8 +40,12 @@ Then open:
 The database contains a `users` table with:
 - `full_name`
 - `email` (unique)
+- `organization`
+- `role` (viewer/admin)
 - `password_hash`
 - `created_at`
+
+Classification logs are stored in `classifications`.
 
 ---
 
@@ -64,9 +68,17 @@ Notes:
 
 After you train a model and create `models/model.joblib`, the app will use it for classification.
 
-- **Classify a tweet**: `POST /api/classify` (requires login)
+-- **Classify a tweet**: `POST /api/classify` (requires login)
   - JSON body: `{ "text": "..." }`
   - Returns: `category`, `confidence`, and UI fields used by the result page (banner, badge, emoji).
+- **Batch classify**: `POST /api/classify/batch` (requires login)
+  - JSON body: `{ "tweets": ["...", "..."] }`
+  - Or upload CSV with `file` form field.
+- **History**: `GET /api/history`
+- **Stats**: `GET /api/stats`
+- **Flag for review**: `POST /api/flag`
+- **Export CSV**: `GET /api/export/csv`
+- **Export PDF**: `GET /api/export/pdf`
 
 If the model file is missing, the API returns **409** with `code: MODEL_MISSING` and the UI will fall back to the built-in keyword heuristic.
 
@@ -98,9 +110,9 @@ If the model file is missing, the API returns **409** with `code: MODEL_MISSING`
 These scripts assume you have a dataset CSV at:
 - `datasets/disaster_tweets.csv`
 
-Expected columns (typical Kaggle format):
+Expected columns:
 - `text` (tweet text)
-- `target` (0/1 label)
+- `label` (category name: Rescue Request, Damage Report, Safety Update, General Information)
 
 Run:
 
