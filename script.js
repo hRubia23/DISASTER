@@ -829,13 +829,59 @@ function processBatchFile(file) {
   const reader = new FileReader();
   reader.onload = () => {
     const rawText = typeof reader.result === 'string' ? reader.result : '';
-    let tweets = rawText
-      .split(/\r?\n/)
-      .map((line) => line.trim())
-      .filter((line) => line.length > 0);
+    const isCsv = /\.csv$/i.test(file.name);
+    let tweets = [];
 
-    if (tweets.length > 0 && tweets[0].toLowerCase() === 'tweet') {
-      tweets = tweets.slice(1);
+    if (isCsv) {
+      const lines = rawText
+        .split(/\r?\n/)
+        .map((line) => line.trim())
+        .filter((line) => line.length > 0);
+
+      const parseCsvRow = (line) => {
+        const cells = [];
+        let current = '';
+        let inQuotes = false;
+        for (let i = 0; i < line.length; i += 1) {
+          const char = line[i];
+          if (char === '"') {
+            if (inQuotes && line[i + 1] === '"') {
+              current += '"';
+              i += 1;
+            } else {
+              inQuotes = !inQuotes;
+            }
+          } else if (char === ',' && !inQuotes) {
+            cells.push(current);
+            current = '';
+          } else {
+            current += char;
+          }
+        }
+        cells.push(current);
+        return cells.map((cell) => cell.trim());
+      };
+
+      const header = lines.length > 0 ? parseCsvRow(lines[0]).map((c) => c.toLowerCase()) : [];
+      const textIndex = header.findIndex((col) => ['tweet_text', 'text', 'tweet'].includes(col));
+      const startIndex = textIndex >= 0 ? 1 : 0;
+
+      for (let i = startIndex; i < lines.length; i += 1) {
+        const row = parseCsvRow(lines[i]);
+        const value = textIndex >= 0 ? row[textIndex] : row[0];
+        if (value && value.trim()) {
+          tweets.push(value.trim());
+        }
+      }
+    } else {
+      tweets = rawText
+        .split(/\r?\n/)
+        .map((line) => line.trim())
+        .filter((line) => line.length > 0);
+
+      if (tweets.length > 0 && tweets[0].toLowerCase() === 'tweet') {
+        tweets = tweets.slice(1);
+      }
     }
 
     localStorage.setItem('batchTweets', JSON.stringify(tweets));

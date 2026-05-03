@@ -19,18 +19,23 @@ def main() -> int:
         return 2
 
     df = pd.read_csv(DATASET_PATH)
-    if "text" not in df.columns:
-        raise SystemExit("Dataset must contain column: text")
+    text_col = None
+    for candidate in ("text", "tweet_text"):
+        if candidate in df.columns:
+            text_col = candidate
+            break
+    if not text_col:
+        raise SystemExit("Dataset must contain column: text or tweet_text")
 
     label_col = None
-    for candidate in ("label", "category"):
+    for candidate in ("label", "category", "class_label"):
         if candidate in df.columns:
             label_col = candidate
             break
     if not label_col:
-        raise SystemExit("Dataset must contain column: label or category")
+        raise SystemExit("Dataset must contain column: label, category, or class_label")
 
-    df["text"] = df["text"].astype(str)
+    df[text_col] = df[text_col].astype(str)
     df[label_col] = df[label_col].astype(str)
 
     # Class distribution
@@ -46,7 +51,7 @@ def main() -> int:
     plt.close()
 
     # Tweet length distribution
-    lengths = df["text"].str.len()
+    lengths = df[text_col].str.len()
     plt.figure(figsize=(7, 4))
     plt.title("Tweet length distribution")
     plt.hist(lengths.dropna(), bins=50, color="#2b6cb0", alpha=0.85)

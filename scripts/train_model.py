@@ -15,7 +15,7 @@ from sklearn.calibration import CalibratedClassifierCV
 from sklearn.feature_extraction.text import TfidfVectorizer
 from sklearn.linear_model import LogisticRegression
 from sklearn.metrics import accuracy_score, f1_score, precision_score, recall_score
-from sklearn.model_selection import GridSearchCV, train_test_split
+from sklearn.model_selection import train_test_split
 from sklearn.naive_bayes import MultinomialNB
 from sklearn.pipeline import FeatureUnion, Pipeline
 from sklearn.svm import LinearSVC
@@ -27,8 +27,13 @@ MODEL_PATH = MODEL_DIR / "model.joblib"
 OUTPUT_DIR = BASE_DIR / "outputs" / "charts"
 
 
+def passthrough_text(value: str) -> str:
+    return value
+
+
 def ensure_nltk() -> None:
     nltk.download("punkt", quiet=True)
+    nltk.download("punkt_tab", quiet=True)
     nltk.download("stopwords", quiet=True)
     nltk.download("vader_lexicon", quiet=True)
 
@@ -88,28 +93,26 @@ class FeatureEngineer(BaseEstimator, TransformerMixin):
         return np.array(features)
 
 
-def build_pipeline(model):
+def build_pipeline(model, include_extra: bool = True):
+    feature_steps = [
+        (
+            "tfidf",
+            TfidfVectorizer(
+                tokenizer=str.split,
+                preprocessor=passthrough_text,
+                lowercase=False,
+                ngram_range=(1, 2),
+                max_features=10_000,
+            ),
+        )
+    ]
+    if include_extra:
+        feature_steps.append(("extra", FeatureEngineer()))
+
     return Pipeline(
         steps=[
             ("prep", TextPreprocessor()),
-            (
-                "features",
-                FeatureUnion(
-                    [
-                        (
-                            "tfidf",
-                            TfidfVectorizer(
-                                tokenizer=str.split,
-                                preprocessor=lambda x: x,
-                                lowercase=False,
-                                ngram_range=(1, 2),
-                                max_features=10_000,
-                            ),
-                        ),
-                        ("extra", FeatureEngineer()),
-                    ]
-                ),
-            ),
+            ("features", FeatureUnion(feature_steps)),
             ("clf", model),
         ]
     )
@@ -126,18 +129,23 @@ def main() -> int:
         return 2
 
     df = pd.read_csv(DATASET_PATH)
-    if "text" not in df.columns:
-        raise SystemExit("Dataset must contain column: text")
+    text_col = None
+    for candidate in ("text", "tweet_text"):
+        if candidate in df.columns:
+            text_col = candidate
+            break
+    if not text_col:
+        raise SystemExit("Dataset must contain column: text or tweet_text")
 
     label_col = None
-    for candidate in ("label", "category"):
+    for candidate in ("label", "category", "class_label"):
         if candidate in df.columns:
             label_col = candidate
             break
     if not label_col:
-        raise SystemExit("Dataset must contain column: label or category")
+        raise SystemExit("Dataset must contain column: label, category, or class_label")
 
-    X = df["text"].astype(str).fillna("")
+    X = df[text_col].astype(str).fillna("")
     y = df[label_col].astype(str).fillna("")
 
     X_train, X_test, y_train, y_test = train_test_split(
@@ -145,24 +153,18 @@ def main() -> int:
     )
 
     models = {
-        "naive_bayes": (MultinomialNB(), {"clf__alpha": [0.5, 1.0]}),
-        "log_reg": (LogisticRegression(max_iter=3000, n_jobs=None), {"clf__C": [0.5, 1.0, 2.0]}),
-        "svm_linear": (
-            CalibratedClassifierCV(LinearSVC(), cv=3),
-            {"clf__base_estimator__C": [0.5, 1.0, 2.0]},
-        ),
+        "log_reg": (LogisticRegression(max_iter=1500, n_jobs=None), True),
     }
 
     results = []
     best_model = None
     best_score = -1.0
 
-    for name, (model, grid) in models.items():
-        pipeline = build_pipeline(model)
-        search = GridSearchCV(pipeline, grid, cv=5, scoring="f1_macro", n_jobs=None)
-        search.fit(X_train, y_train)
+    for name, (model, include_extra) in models.items():
+        pipeline = build_pipeline(model, include_extra=include_extra)
+        pipeline.fit(X_train, y_train)
 
-        preds = search.best_estimator_.predict(X_test)
+        preds = pipeline.predict(X_test)
         metrics = {
             "model": name,
             "f1_macro": f1_score(y_test, preds, average="macro"),
@@ -174,7 +176,7 @@ def main() -> int:
 
         if metrics["f1_macro"] > best_score:
             best_score = metrics["f1_macro"]
-            best_model = search.best_estimator_
+            best_model = pipeline
 
     if best_model is None:
         raise SystemExit("[train_model] No model trained.")
