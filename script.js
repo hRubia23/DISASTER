@@ -451,8 +451,81 @@ async function handlePostReplyAction(record, countEl, replyText) {
     }
     const payload = await response.json();
     updatePostActionCount(countEl, payload.reply_count, false, null);
+    return payload.reply || null;
   } catch (error) {
     // Ignore reply errors.
+  }
+  return null;
+}
+
+function renderReplyItem(reply) {
+  const wrapper = document.createElement('div');
+  wrapper.className = 'reply-item';
+
+  const head = document.createElement('div');
+  head.className = 'reply-head';
+
+  const avatar = document.createElement('div');
+  avatar.className = 'feed-avatar';
+  avatar.textContent = '!';
+
+  const meta = document.createElement('div');
+  meta.className = 'reply-meta';
+
+  const author = document.createElement('div');
+  author.className = 'reply-author';
+  author.textContent = reply.full_name || currentUserName || 'User';
+
+  const time = document.createElement('div');
+  time.className = 'reply-time';
+  time.textContent = formatRelativeTime(reply.created_at);
+
+  meta.appendChild(author);
+  meta.appendChild(time);
+  head.appendChild(avatar);
+  head.appendChild(meta);
+
+  const text = document.createElement('p');
+  text.className = 'reply-text';
+  text.textContent = reply.reply_text || '';
+
+  wrapper.appendChild(head);
+  wrapper.appendChild(text);
+  return wrapper;
+}
+
+function renderReplies(listEl, replies) {
+  if (!listEl) {
+    return;
+  }
+  listEl.innerHTML = '';
+  if (!replies || replies.length === 0) {
+    const empty = document.createElement('p');
+    empty.className = 'post-replies-empty';
+    empty.textContent = 'No replies yet.';
+    listEl.appendChild(empty);
+    return;
+  }
+  replies.forEach((reply) => {
+    listEl.appendChild(renderReplyItem(reply));
+  });
+}
+
+async function loadReplies(classificationId, listEl) {
+  if (!classificationId || window.location.protocol === 'file:') {
+    return;
+  }
+  try {
+    const response = await fetch(`/api/classifications/${encodeURIComponent(classificationId)}/replies`, {
+      credentials: 'include'
+    });
+    if (!response.ok) {
+      return;
+    }
+    const payload = await response.json();
+    renderReplies(listEl, payload.items || []);
+  } catch (error) {
+    // Ignore reply load errors.
   }
 }
 
@@ -517,6 +590,7 @@ async function initPostView() {
   const actionButtons = document.querySelectorAll('.post-actions .icon-btn');
   const replyInput = document.querySelector('.post-reply .reply-input');
   const replySubmit = document.querySelector('.post-reply .btn');
+  const repliesList = document.getElementById('postRepliesList');
 
   if (!postBody || !postText) {
     return;
@@ -591,10 +665,16 @@ async function initPostView() {
   });
 
   if (replySubmit) {
-    replySubmit.addEventListener('click', () => {
+    replySubmit.addEventListener('click', async () => {
       const countEl = document.querySelector('.post-action-count[data-action="reply"]');
       const replyText = replyInput?.value || '';
-      handlePostReplyAction(postRecord, countEl, replyText);
+      const reply = await handlePostReplyAction(postRecord, countEl, replyText);
+      if (reply && repliesList) {
+        if (repliesList.querySelector('.post-replies-empty')) {
+          repliesList.innerHTML = '';
+        }
+        repliesList.prepend(renderReplyItem(reply));
+      }
       if (replyInput) {
         replyInput.value = '';
       }
@@ -644,6 +724,7 @@ async function initPostView() {
           const replyEl = document.querySelector('.post-action-count[data-action="reply"]');
           updatePostActionCount(replyEl, payload.reply_count, false, null);
         }
+        loadReplies(idParam, repliesList);
         return;
       }
     } catch (error) {
@@ -653,6 +734,10 @@ async function initPostView() {
 
   if (!tweetParam && !idParam) {
     postText.textContent = 'No post data available.';
+  }
+
+  if (idParam) {
+    loadReplies(idParam, repliesList);
   }
 }
 

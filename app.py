@@ -662,12 +662,55 @@ def add_reply(classification_id: int):
         (classification_id, session.get("user_id"), reply_text, now_utc_iso()),
     )
     conn.commit()
+    reply_row = conn.execute(
+        """
+        SELECT r.id, r.reply_text, r.created_at, u.full_name
+        FROM replies r
+        JOIN users u ON u.id = r.user_id
+        WHERE r.id = last_insert_rowid()
+        """,
+    ).fetchone()
     count_row = conn.execute(
         "SELECT COUNT(*) as count FROM replies WHERE classification_id = ?",
         (classification_id,),
     ).fetchone()
     conn.close()
-    return jsonify({"reply_count": int(count_row["count"])})
+    return jsonify({"reply_count": int(count_row["count"]), "reply": dict(reply_row) if reply_row else None})
+
+
+@app.get("/api/classifications/<int:classification_id>/replies")
+def list_replies(classification_id: int):
+    if "user_id" not in session:
+        return jsonify({"message": "Authentication required."}), 401
+
+    conn = get_connection()
+    if session.get("role") == "admin":
+        owned = conn.execute(
+            "SELECT 1 FROM classifications WHERE id = ?",
+            (classification_id,),
+        ).fetchone()
+    else:
+        owned = conn.execute(
+            "SELECT 1 FROM classifications WHERE id = ? AND user_id = ?",
+            (classification_id, session.get("user_id")),
+        ).fetchone()
+
+    if not owned:
+        conn.close()
+        return jsonify({"message": "Classification not found."}), 404
+
+    rows = conn.execute(
+        """
+        SELECT r.id, r.reply_text, r.created_at, u.full_name
+        FROM replies r
+        JOIN users u ON u.id = r.user_id
+        WHERE r.classification_id = ?
+        ORDER BY r.id ASC
+        """,
+        (classification_id,),
+    ).fetchall()
+    conn.close()
+    return jsonify({"items": [dict(row) for row in rows]})
 
 
 @app.get("/api/stats")
