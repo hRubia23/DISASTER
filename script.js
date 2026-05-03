@@ -248,6 +248,21 @@ function buildFeedItem(record) {
   }
 
   if (!isAdmin) {
+    actions.classList.add('feed-action-bar');
+    const actionItems = ['Reply', 'Repost', 'Like', 'Share'];
+    actionItems.forEach((label) => {
+      const btn = document.createElement('button');
+      btn.type = 'button';
+      btn.className = 'feed-action-btn';
+      btn.textContent = label;
+      btn.addEventListener('click', (event) => {
+        event.stopPropagation();
+      });
+      actions.appendChild(btn);
+    });
+  }
+
+  if (!isAdmin) {
     item.classList.add('user-post');
     item.tabIndex = 0;
     item.setAttribute('role', 'button');

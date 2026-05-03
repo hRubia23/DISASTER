@@ -299,6 +299,30 @@ a {
   flex-wrap: wrap;
 }
 
+.feed-action-bar {
+  justify-content: flex-start;
+  gap: 10px;
+}
+
+.feed-action-btn {
+  border: 1px solid #dfe3ea;
+  background: #f9fbff;
+  color: #334155;
+  border-radius: 999px;
+  padding: 6px 12px;
+  font-size: 0.78rem;
+  font-weight: 700;
+  cursor: pointer;
+  transition: background 0.2s ease, border-color 0.2s ease, transform 0.2s ease;
+}
+
+.feed-action-btn:hover,
+.feed-action-btn:focus {
+  background: #eef2f7;
+  border-color: #cdd6e1;
+  transform: translateY(-1px);
+}
+
 .post-card {
   padding: 24px;
   gap: 18px;
