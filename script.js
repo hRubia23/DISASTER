@@ -17,6 +17,7 @@ const userGreeting = document.getElementById('userGreeting');
 const liveFeed = document.getElementById('liveFeed');
 const feedSeenIds = new Set();
 let currentUserRole = 'viewer';
+let currentUserName = '';
 
 async function getCurrentSessionUser() {
   if (window.location.protocol === 'file:') {
@@ -54,6 +55,7 @@ async function initAuthGuard() {
 
   if (user) {
     currentUserRole = user.role || 'viewer';
+    currentUserName = user.full_name || '';
     document.body.dataset.role = currentUserRole;
     const adminOnly = document.querySelectorAll('[data-role="admin"]');
     adminOnly.forEach((el) => {
@@ -190,6 +192,10 @@ function formatRelativeTime(isoString) {
   return `${days}d ago`;
 }
 
+function getDisplayName(record) {
+  return record.full_name || currentUserName || 'Disaster Triage';
+}
+
 function buildFeedItem(record) {
   const payload = buildCategoryPayload(record.category, record.confidence);
   const isAdmin = currentUserRole === 'admin';
@@ -208,7 +214,7 @@ function buildFeedItem(record) {
   avatar.textContent = '!';
 
   const titleText = document.createElement('div');
-  titleText.innerHTML = `<div class="feed-title">Disaster Triage</div><div class="feed-time">${formatRelativeTime(record.created_at || record.timestamp)}</div>`;
+  titleText.innerHTML = `<div class="feed-title">${getDisplayName(record)}</div><div class="feed-time">${formatRelativeTime(record.created_at || record.timestamp)}</div>`;
 
   title.appendChild(avatar);
   title.appendChild(titleText);
@@ -249,17 +255,38 @@ function buildFeedItem(record) {
 
   if (!isAdmin) {
     actions.classList.add('feed-action-bar');
-    const actionItems = ['Reply', 'Repost', 'Like', 'Share'];
-    actionItems.forEach((label) => {
-      const btn = document.createElement('button');
-      btn.type = 'button';
-      btn.className = 'feed-action-btn';
-      btn.textContent = label;
-      btn.addEventListener('click', (event) => {
-        event.stopPropagation();
-      });
-      actions.appendChild(btn);
+    const likeCount = Number(record.like_count || 0);
+    const replyCount = Number(record.reply_count || 0);
+    const repostCount = Number(record.repost_count || 0);
+    const likeBtn = buildFeedActionButton('Like', likeCount, Boolean(record.liked_by_me));
+    const replyBtn = buildFeedActionButton('Reply', replyCount, false);
+    const repostBtn = buildFeedActionButton('Repost', repostCount, Boolean(record.reposted_by_me));
+    const shareBtn = buildFeedActionButton('Share', 0, false, true);
+
+    likeBtn.addEventListener('click', (event) => {
+      event.stopPropagation();
+      handleToggleAction(record, 'like', likeBtn);
     });
+
+    repostBtn.addEventListener('click', (event) => {
+      event.stopPropagation();
+      handleToggleAction(record, 'repost', repostBtn);
+    });
+
+    replyBtn.addEventListener('click', (event) => {
+      event.stopPropagation();
+      handleReplyAction(record, replyBtn);
+    });
+
+    shareBtn.addEventListener('click', (event) => {
+      event.stopPropagation();
+      handleShareAction(record);
+    });
+
+    actions.appendChild(replyBtn);
+    actions.appendChild(repostBtn);
+    actions.appendChild(likeBtn);
+    actions.appendChild(shareBtn);
   }
 
   if (!isAdmin) {
@@ -288,6 +315,99 @@ function buildFeedItem(record) {
   item.appendChild(actions);
 
   return item;
+}
+
+function buildFeedActionButton(label, count, isActive, hideCount = false) {
+  const btn = document.createElement('button');
+  btn.type = 'button';
+  btn.className = `feed-action-btn${isActive ? ' is-active' : ''}`;
+  btn.dataset.label = label;
+  btn.dataset.count = String(count || 0);
+  const suffix = hideCount ? '' : ` ${count || 0}`;
+  btn.textContent = `${label}${suffix}`;
+  return btn;
+}
+
+function updateFeedActionButton(btn, count, isActive) {
+  const label = btn.dataset.label || btn.textContent.split(' ')[0] || '';
+  const nextCount = Number.isFinite(count) ? count : Number(btn.dataset.count || 0);
+  btn.dataset.count = String(nextCount);
+  btn.textContent = `${label} ${nextCount}`;
+  btn.classList.toggle('is-active', Boolean(isActive));
+}
+
+async function handleToggleAction(record, action, btn) {
+  const id = record.classification_id || record.id;
+  if (!id || window.location.protocol === 'file:') {
+    return;
+  }
+
+  try {
+    const response = await fetch(`/api/classifications/${encodeURIComponent(id)}/${action}`, {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json'
+      },
+      credentials: 'include'
+    });
+    if (!response.ok) {
+      return;
+    }
+    const payload = await response.json();
+    if (action === 'like') {
+      updateFeedActionButton(btn, payload.like_count, payload.liked);
+    } else if (action === 'repost') {
+      updateFeedActionButton(btn, payload.repost_count, payload.reposted);
+    }
+  } catch (error) {
+    // Ignore toggle errors.
+  }
+}
+
+async function handleReplyAction(record, btn) {
+  const id = record.classification_id || record.id;
+  if (!id || window.location.protocol === 'file:') {
+    return;
+  }
+
+  const reply = window.prompt('Write a reply');
+  if (!reply) {
+    return;
+  }
+
+  try {
+    const response = await fetch(`/api/classifications/${encodeURIComponent(id)}/reply`, {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json'
+      },
+      credentials: 'include',
+      body: JSON.stringify({ reply })
+    });
+    if (!response.ok) {
+      return;
+    }
+    const payload = await response.json();
+    updateFeedActionButton(btn, payload.reply_count, false);
+  } catch (error) {
+    // Ignore reply errors.
+  }
+}
+
+async function handleShareAction(record) {
+  const id = record.classification_id || record.id;
+  const shareUrl = id ? `${window.location.origin}/post.html?id=${encodeURIComponent(id)}` : window.location.href;
+  try {
+    if (navigator.share) {
+      await navigator.share({ title: 'Disaster post', url: shareUrl });
+      return;
+    }
+    if (navigator.clipboard) {
+      await navigator.clipboard.writeText(shareUrl);
+    }
+  } catch (error) {
+    // Ignore share errors.
+  }
 }
 
 function getFeedKey(record) {
@@ -327,7 +447,8 @@ async function loadLiveFeed() {
   }
 
   try {
-    const response = await fetch('/api/history?limit=12', { credentials: 'include' });
+    const scopeParam = currentUserRole === 'admin' ? 'all' : 'mine';
+    const response = await fetch(`/api/history?limit=12&scope=${scopeParam}`, { credentials: 'include' });
     if (!response.ok) {
       return;
     }
@@ -345,6 +466,7 @@ async function initPostView() {
   const postBody = document.getElementById('postBody');
   const postText = document.getElementById('postText');
   const postTime = document.getElementById('postTime');
+  const postAuthor = document.getElementById('postAuthor');
   const backBtn = document.getElementById('backBtn');
 
   if (!postBody || !postText) {
@@ -370,6 +492,10 @@ async function initPostView() {
     postText.textContent = decodeURIComponent(tweetParam);
   }
 
+  if (postAuthor) {
+    postAuthor.textContent = currentUserName || 'Disaster Triage';
+  }
+
   if (timeParam && postTime) {
     postTime.textContent = formatRelativeTime(timeParam);
   }
@@ -383,6 +509,9 @@ async function initPostView() {
         const payload = await response.json();
         if (payload?.tweet) {
           postText.textContent = payload.tweet;
+        }
+        if (payload?.full_name && postAuthor) {
+          postAuthor.textContent = payload.full_name;
         }
         if (payload?.created_at && postTime) {
           postTime.textContent = formatRelativeTime(payload.created_at);

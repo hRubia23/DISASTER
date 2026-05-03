@@ -1,11 +1,15 @@
 from __future__ import annotations
 
+import csv
+import io
 import os
 import sqlite3
-from datetime import datetime
+from datetime import datetime, timezone
 from pathlib import Path
 
 from flask import Flask, jsonify, request, session, send_from_directory
+from reportlab.lib.pagesizes import letter
+from reportlab.pdfgen import canvas
 import joblib
 from werkzeug.security import check_password_hash, generate_password_hash
 
@@ -126,8 +130,11 @@ def category_payload(category: str, confidence: float):
 
 
 def get_connection() -> sqlite3.Connection:
-    conn = sqlite3.connect(DB_PATH)
+    conn = sqlite3.connect(DB_PATH, timeout=5, check_same_thread=False)
     conn.row_factory = sqlite3.Row
+    conn.execute("PRAGMA journal_mode=WAL")
+    conn.execute("PRAGMA synchronous=NORMAL")
+    conn.execute("PRAGMA busy_timeout=5000")
     return conn
 
 
@@ -141,11 +148,78 @@ def init_db() -> None:
             email TEXT NOT NULL UNIQUE,
             organization TEXT NOT NULL,
             password_hash TEXT NOT NULL,
+            role TEXT NOT NULL DEFAULT 'viewer',
             created_at TEXT NOT NULL
         )
         """
     )
-    # Lightweight migration for existing DBs created before `organization` existed.
+    conn.execute(
+        """
+        CREATE TABLE IF NOT EXISTS classifications (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            user_id INTEGER NOT NULL,
+            tweet TEXT NOT NULL,
+            category TEXT NOT NULL,
+            confidence REAL NOT NULL,
+            model_used TEXT NOT NULL,
+            created_at TEXT NOT NULL,
+            FOREIGN KEY(user_id) REFERENCES users(id)
+        )
+        """
+    )
+    conn.execute(
+        """
+        CREATE TABLE IF NOT EXISTS flags (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            classification_id INTEGER NOT NULL,
+            user_id INTEGER NOT NULL,
+            reason TEXT NOT NULL,
+            created_at TEXT NOT NULL,
+            FOREIGN KEY(classification_id) REFERENCES classifications(id),
+            FOREIGN KEY(user_id) REFERENCES users(id)
+        )
+        """
+    )
+    conn.execute(
+        """
+        CREATE TABLE IF NOT EXISTS likes (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            classification_id INTEGER NOT NULL,
+            user_id INTEGER NOT NULL,
+            created_at TEXT NOT NULL,
+            UNIQUE(classification_id, user_id),
+            FOREIGN KEY(classification_id) REFERENCES classifications(id),
+            FOREIGN KEY(user_id) REFERENCES users(id)
+        )
+        """
+    )
+    conn.execute(
+        """
+        CREATE TABLE IF NOT EXISTS reposts (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            classification_id INTEGER NOT NULL,
+            user_id INTEGER NOT NULL,
+            created_at TEXT NOT NULL,
+            UNIQUE(classification_id, user_id),
+            FOREIGN KEY(classification_id) REFERENCES classifications(id),
+            FOREIGN KEY(user_id) REFERENCES users(id)
+        )
+        """
+    )
+    conn.execute(
+        """
+        CREATE TABLE IF NOT EXISTS replies (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            classification_id INTEGER NOT NULL,
+            user_id INTEGER NOT NULL,
+            reply_text TEXT NOT NULL,
+            created_at TEXT NOT NULL,
+            FOREIGN KEY(classification_id) REFERENCES classifications(id),
+            FOREIGN KEY(user_id) REFERENCES users(id)
+        )
+        """
+    )
+    # Lightweight migrations for existing DBs.
     cols = {
         row["name"]
         for row in conn.execute("PRAGMA table_info(users)").fetchall()
@@ -153,8 +227,14 @@ def init_db() -> None:
     }
     if "organization" not in cols:
         conn.execute("ALTER TABLE users ADD COLUMN organization TEXT NOT NULL DEFAULT ''")
+    if "role" not in cols:
+        conn.execute("ALTER TABLE users ADD COLUMN role TEXT NOT NULL DEFAULT 'viewer'")
     conn.commit()
     conn.close()
+
+
+def now_utc_iso() -> str:
+    return datetime.now(timezone.utc).isoformat()
 
 
 def clean_email(raw_email: str) -> str:
@@ -182,17 +262,28 @@ def register():
         return jsonify({"message": "Organization / agency is required."}), 400
 
     password_hash = generate_password_hash(password)
+    role = "viewer"
+    admin_emails = {
+        email.strip().lower()
+        for email in os.environ.get("ADMIN_EMAILS", "").split(",")
+        if email.strip()
+    }
+    if email in admin_emails:
+        role = "admin"
 
+    conn = None
     try:
         conn = get_connection()
         conn.execute(
-            "INSERT INTO users (full_name, email, organization, password_hash, created_at) VALUES (?, ?, ?, ?, ?)",
-            (full_name, email, organization, password_hash, datetime.utcnow().isoformat()),
+            "INSERT INTO users (full_name, email, organization, password_hash, role, created_at) VALUES (?, ?, ?, ?, ?, ?)",
+            (full_name, email, organization, password_hash, role, now_utc_iso()),
         )
         conn.commit()
-        conn.close()
     except sqlite3.IntegrityError:
         return jsonify({"message": "Email is already registered."}), 409
+    finally:
+        if conn is not None:
+            conn.close()
 
     return jsonify({"message": "Registration successful."}), 201
 
@@ -205,7 +296,7 @@ def login():
 
     conn = get_connection()
     row = conn.execute(
-        "SELECT id, full_name, email, organization, password_hash FROM users WHERE email = ?",
+        "SELECT id, full_name, email, organization, role, password_hash FROM users WHERE email = ?",
         (email,),
     ).fetchone()
     conn.close()
@@ -217,6 +308,7 @@ def login():
     session["full_name"] = row["full_name"]
     session["email"] = row["email"]
     session["organization"] = row["organization"]
+    session["role"] = row["role"]
 
     return jsonify(
         {
@@ -226,9 +318,43 @@ def login():
                 "full_name": row["full_name"],
                 "email": row["email"],
                 "organization": row["organization"],
+                "role": row["role"],
             },
         }
     )
+
+
+def classify_text(text: str):
+    model = get_model()
+    model_used = "heuristic"
+    if model is None:
+        category = keyword_subcategory(text)
+        confidence = 0.72
+        return category, confidence, model_used
+
+    model_used = "ml"
+    try:
+        proba = model.predict_proba([text])[0]
+        best_idx = int(proba.argmax())
+        confidence = float(proba[best_idx])
+        category = str(model.classes_[best_idx])
+    except Exception:
+        pred = model.predict([text])[0]
+        category = str(pred)
+        confidence = 0.85
+    return category, confidence, model_used
+
+
+def log_classification(user_id: int, tweet: str, category: str, confidence: float, model_used: str) -> int:
+    conn = get_connection()
+    cur = conn.execute(
+        "INSERT INTO classifications (user_id, tweet, category, confidence, model_used, created_at) VALUES (?, ?, ?, ?, ?, ?)",
+        (user_id, tweet, category, confidence, model_used, now_utc_iso()),
+    )
+    conn.commit()
+    classification_id = int(cur.lastrowid)
+    conn.close()
+    return classification_id
 
 @app.post("/api/classify")
 def classify():
@@ -240,34 +366,57 @@ def classify():
     if len(text) < 1:
         return jsonify({"message": "Text is required."}), 400
 
-    model = get_model()
-    if model is None:
-        return (
-            jsonify(
-                {
-                    "message": "Model not trained yet. Run scripts/train_model.py first.",
-                    "code": "MODEL_MISSING",
-                }
-            ),
-            409,
-        )
+    category, confidence, model_used = classify_text(text)
+    classification_id = log_classification(
+        int(session["user_id"]), text, category, confidence, model_used
+    )
+    payload = category_payload(category, confidence)
+    payload["classification_id"] = classification_id
+    payload["model_used"] = model_used
+    return jsonify(payload)
 
-    # Binary ML score: P(disaster)
-    try:
-        proba = float(model.predict_proba([text])[0][1])
-    except Exception:
-        # Fallback: some sklearn pipelines don't expose predict_proba
-        pred = int(model.predict([text])[0])
-        proba = 0.85 if pred == 1 else 0.15
 
-    if proba < 0.5:
-        category = "General Information"
-        confidence = 1.0 - proba
+@app.post("/api/classify/batch")
+def classify_batch():
+    if "user_id" not in session:
+        return jsonify({"message": "Authentication required."}), 401
+
+    tweets = []
+    if request.files:
+        file = request.files.get("file")
+        if not file:
+            return jsonify({"message": "File is required."}), 400
+        raw = file.read().decode("utf-8", errors="ignore")
+        reader = csv.reader(io.StringIO(raw))
+        rows = list(reader)
+        if rows and len(rows[0]) == 1 and rows[0][0].strip().lower() in {"tweet", "text"}:
+            rows = rows[1:]
+        for row in rows:
+            if not row:
+                continue
+            tweets.append(str(row[0]).strip())
     else:
-        category = keyword_subcategory(text)
-        confidence = proba
+        data = request.get_json(silent=True) or {}
+        tweets = data.get("tweets") if isinstance(data, dict) else None
+        if not isinstance(tweets, list):
+            tweets = []
 
-    return jsonify(category_payload(category, confidence))
+    tweets = [str(t or "").strip() for t in tweets if str(t or "").strip()]
+    if not tweets:
+        return jsonify({"message": "Tweets array or CSV file is required."}), 400
+
+    results = []
+    for raw in tweets:
+        text = str(raw or "").strip()
+        category, confidence, model_used = classify_text(text)
+        classification_id = log_classification(
+            int(session["user_id"]), text, category, confidence, model_used
+        )
+        payload = category_payload(category, confidence)
+        payload.update({"classification_id": classification_id, "model_used": model_used, "tweet": text})
+        results.append(payload)
+
+    return jsonify({"results": results, "count": len(results)})
 
 
 @app.get("/api/me")
@@ -283,9 +432,389 @@ def me():
                 "full_name": session.get("full_name"),
                 "email": session.get("email"),
                 "organization": session.get("organization"),
+                "role": session.get("role"),
             },
         }
     )
+
+
+@app.get("/api/history")
+def history():
+    if "user_id" not in session:
+        return jsonify({"message": "Authentication required."}), 401
+
+    scope = request.args.get("scope", "mine")
+    limit = int(request.args.get("limit", "200"))
+    limit = max(1, min(limit, 500))
+    user_id = session.get("user_id")
+
+    conn = get_connection()
+    if scope == "all" and session.get("role") == "admin":
+        rows = conn.execute(
+            """
+            SELECT c.id, c.tweet, c.category, c.confidence, c.created_at, c.model_used, u.full_name,
+                   (SELECT COUNT(*) FROM likes l WHERE l.classification_id = c.id) AS like_count,
+                   (SELECT COUNT(*) FROM reposts r WHERE r.classification_id = c.id) AS repost_count,
+                   (SELECT COUNT(*) FROM replies rp WHERE rp.classification_id = c.id) AS reply_count,
+                   EXISTS(
+                       SELECT 1 FROM likes l2 WHERE l2.classification_id = c.id AND l2.user_id = ?
+                   ) AS liked_by_me,
+                   EXISTS(
+                       SELECT 1 FROM reposts r2 WHERE r2.classification_id = c.id AND r2.user_id = ?
+                   ) AS reposted_by_me
+            FROM classifications c
+            JOIN users u ON u.id = c.user_id
+            ORDER BY c.id DESC
+            LIMIT ?
+            """,
+            (user_id, user_id, limit),
+        ).fetchall()
+    else:
+        rows = conn.execute(
+            """
+            SELECT c.id, c.tweet, c.category, c.confidence, c.created_at, c.model_used, u.full_name,
+                   (SELECT COUNT(*) FROM likes l WHERE l.classification_id = c.id) AS like_count,
+                   (SELECT COUNT(*) FROM reposts r WHERE r.classification_id = c.id) AS repost_count,
+                   (SELECT COUNT(*) FROM replies rp WHERE rp.classification_id = c.id) AS reply_count,
+                   EXISTS(
+                       SELECT 1 FROM likes l2 WHERE l2.classification_id = c.id AND l2.user_id = ?
+                   ) AS liked_by_me,
+                   EXISTS(
+                       SELECT 1 FROM reposts r2 WHERE r2.classification_id = c.id AND r2.user_id = ?
+                   ) AS reposted_by_me
+            FROM classifications c
+            JOIN users u ON u.id = c.user_id
+            WHERE c.user_id = ?
+            ORDER BY id DESC
+            LIMIT ?
+            """,
+            (user_id, user_id, user_id, limit),
+        ).fetchall()
+    conn.close()
+
+    items = [dict(row) for row in rows]
+    return jsonify({"items": items})
+
+
+@app.get("/api/classifications/<int:classification_id>")
+def get_classification(classification_id: int):
+    if "user_id" not in session:
+        return jsonify({"message": "Authentication required."}), 401
+
+    conn = get_connection()
+    if session.get("role") == "admin":
+        row = conn.execute(
+            """
+            SELECT c.id, c.tweet, c.category, c.confidence, c.created_at, c.model_used, u.full_name,
+                   (SELECT COUNT(*) FROM likes l WHERE l.classification_id = c.id) AS like_count,
+                   (SELECT COUNT(*) FROM reposts r WHERE r.classification_id = c.id) AS repost_count,
+                   (SELECT COUNT(*) FROM replies rp WHERE rp.classification_id = c.id) AS reply_count,
+                   EXISTS(
+                       SELECT 1 FROM likes l2 WHERE l2.classification_id = c.id AND l2.user_id = ?
+                   ) AS liked_by_me,
+                   EXISTS(
+                       SELECT 1 FROM reposts r2 WHERE r2.classification_id = c.id AND r2.user_id = ?
+                   ) AS reposted_by_me
+            FROM classifications c
+            JOIN users u ON u.id = c.user_id
+            WHERE c.id = ?
+            """,
+            (session.get("user_id"), session.get("user_id"), classification_id),
+        ).fetchone()
+    else:
+        row = conn.execute(
+            """
+            SELECT c.id, c.tweet, c.category, c.confidence, c.created_at, c.model_used, u.full_name,
+                   (SELECT COUNT(*) FROM likes l WHERE l.classification_id = c.id) AS like_count,
+                   (SELECT COUNT(*) FROM reposts r WHERE r.classification_id = c.id) AS repost_count,
+                   (SELECT COUNT(*) FROM replies rp WHERE rp.classification_id = c.id) AS reply_count,
+                   EXISTS(
+                       SELECT 1 FROM likes l2 WHERE l2.classification_id = c.id AND l2.user_id = ?
+                   ) AS liked_by_me,
+                   EXISTS(
+                       SELECT 1 FROM reposts r2 WHERE r2.classification_id = c.id AND r2.user_id = ?
+                   ) AS reposted_by_me
+            FROM classifications c
+            JOIN users u ON u.id = c.user_id
+            WHERE c.id = ? AND c.user_id = ?
+            """,
+            (session.get("user_id"), session.get("user_id"), classification_id, session.get("user_id")),
+        ).fetchone()
+    conn.close()
+
+    if not row:
+        return jsonify({"message": "Classification not found."}), 404
+    return jsonify(dict(row))
+
+
+@app.post("/api/classifications/<int:classification_id>/like")
+def toggle_like(classification_id: int):
+    if "user_id" not in session:
+        return jsonify({"message": "Authentication required."}), 401
+
+    if session.get("role") == "admin":
+        return jsonify({"message": "Admins cannot like posts."}), 403
+
+    conn = get_connection()
+    owned = conn.execute(
+        "SELECT 1 FROM classifications WHERE id = ? AND user_id = ?",
+        (classification_id, session.get("user_id")),
+    ).fetchone()
+    if not owned:
+        conn.close()
+        return jsonify({"message": "Classification not found."}), 404
+
+    existing = conn.execute(
+        "SELECT 1 FROM likes WHERE classification_id = ? AND user_id = ?",
+        (classification_id, session.get("user_id")),
+    ).fetchone()
+
+    if existing:
+        conn.execute(
+            "DELETE FROM likes WHERE classification_id = ? AND user_id = ?",
+            (classification_id, session.get("user_id")),
+        )
+        liked = False
+    else:
+        conn.execute(
+            "INSERT INTO likes (classification_id, user_id, created_at) VALUES (?, ?, ?)",
+            (classification_id, session.get("user_id"), now_utc_iso()),
+        )
+        liked = True
+
+    conn.commit()
+    count_row = conn.execute(
+        "SELECT COUNT(*) as count FROM likes WHERE classification_id = ?",
+        (classification_id,),
+    ).fetchone()
+    conn.close()
+    return jsonify({"liked": liked, "like_count": int(count_row["count"])})
+
+
+@app.post("/api/classifications/<int:classification_id>/repost")
+def toggle_repost(classification_id: int):
+    if "user_id" not in session:
+        return jsonify({"message": "Authentication required."}), 401
+
+    if session.get("role") == "admin":
+        return jsonify({"message": "Admins cannot repost."}), 403
+
+    conn = get_connection()
+    owned = conn.execute(
+        "SELECT 1 FROM classifications WHERE id = ? AND user_id = ?",
+        (classification_id, session.get("user_id")),
+    ).fetchone()
+    if not owned:
+        conn.close()
+        return jsonify({"message": "Classification not found."}), 404
+
+    existing = conn.execute(
+        "SELECT 1 FROM reposts WHERE classification_id = ? AND user_id = ?",
+        (classification_id, session.get("user_id")),
+    ).fetchone()
+
+    if existing:
+        conn.execute(
+            "DELETE FROM reposts WHERE classification_id = ? AND user_id = ?",
+            (classification_id, session.get("user_id")),
+        )
+        reposted = False
+    else:
+        conn.execute(
+            "INSERT INTO reposts (classification_id, user_id, created_at) VALUES (?, ?, ?)",
+            (classification_id, session.get("user_id"), now_utc_iso()),
+        )
+        reposted = True
+
+    conn.commit()
+    count_row = conn.execute(
+        "SELECT COUNT(*) as count FROM reposts WHERE classification_id = ?",
+        (classification_id,),
+    ).fetchone()
+    conn.close()
+    return jsonify({"reposted": reposted, "repost_count": int(count_row["count"])})
+
+
+@app.post("/api/classifications/<int:classification_id>/reply")
+def add_reply(classification_id: int):
+    if "user_id" not in session:
+        return jsonify({"message": "Authentication required."}), 401
+
+    if session.get("role") == "admin":
+        return jsonify({"message": "Admins cannot reply."}), 403
+
+    data = request.get_json(silent=True) or {}
+    reply_text = str(data.get("reply", "")).strip()
+    if len(reply_text) < 2:
+        return jsonify({"message": "Reply must be at least 2 characters."}), 400
+
+    conn = get_connection()
+    owned = conn.execute(
+        "SELECT 1 FROM classifications WHERE id = ? AND user_id = ?",
+        (classification_id, session.get("user_id")),
+    ).fetchone()
+    if not owned:
+        conn.close()
+        return jsonify({"message": "Classification not found."}), 404
+
+    conn.execute(
+        "INSERT INTO replies (classification_id, user_id, reply_text, created_at) VALUES (?, ?, ?, ?)",
+        (classification_id, session.get("user_id"), reply_text, now_utc_iso()),
+    )
+    conn.commit()
+    count_row = conn.execute(
+        "SELECT COUNT(*) as count FROM replies WHERE classification_id = ?",
+        (classification_id,),
+    ).fetchone()
+    conn.close()
+    return jsonify({"reply_count": int(count_row["count"])})
+
+
+@app.get("/api/stats")
+def stats():
+    if "user_id" not in session:
+        return jsonify({"message": "Authentication required."}), 401
+
+    scope = request.args.get("scope", "mine")
+    conn = get_connection()
+    if scope == "all" and session.get("role") == "admin":
+        where_clause = ""
+        params = ()
+    else:
+        where_clause = "WHERE user_id = ?"
+        params = (session.get("user_id"),)
+
+    rows = conn.execute(
+        f"SELECT category, COUNT(*) as count, AVG(confidence) as avg_conf FROM classifications {where_clause} GROUP BY category",
+        params,
+    ).fetchall()
+    total_row = conn.execute(
+        f"SELECT COUNT(*) as total, AVG(confidence) as avg_conf FROM classifications {where_clause}",
+        params,
+    ).fetchone()
+    conn.close()
+
+    by_category = {row["category"]: row["count"] for row in rows}
+    avg_conf = float(total_row["avg_conf"] or 0.0)
+    total = int(total_row["total"] or 0)
+    return jsonify({"total": total, "avg_confidence": round(avg_conf * 100, 1), "by_category": by_category})
+
+
+@app.post("/api/flag")
+def flag():
+    if "user_id" not in session:
+        return jsonify({"message": "Authentication required."}), 401
+
+    data = request.get_json(silent=True) or {}
+    classification_id = data.get("classification_id")
+    reason = str(data.get("reason", "Needs review")).strip() or "Needs review"
+
+    if not classification_id:
+        return jsonify({"message": "classification_id is required."}), 400
+
+    conn = get_connection()
+    conn.execute(
+        "INSERT INTO flags (classification_id, user_id, reason, created_at) VALUES (?, ?, ?, ?)",
+        (classification_id, session.get("user_id"), reason, now_utc_iso()),
+    )
+    conn.commit()
+    conn.close()
+    return jsonify({"message": "Flag recorded."})
+
+
+@app.post("/api/history/clear")
+def clear_history():
+    if "user_id" not in session:
+        return jsonify({"message": "Authentication required."}), 401
+
+    conn = get_connection()
+    conn.execute("DELETE FROM classifications WHERE user_id = ?", (session.get("user_id"),))
+    conn.commit()
+    conn.close()
+    return jsonify({"message": "History cleared."})
+
+
+@app.get("/api/export/csv")
+def export_csv():
+    if "user_id" not in session:
+        return jsonify({"message": "Authentication required."}), 401
+
+    scope = request.args.get("scope", "mine")
+    conn = get_connection()
+    if scope == "all" and session.get("role") == "admin":
+        rows = conn.execute(
+            """
+            SELECT c.tweet, c.category, c.confidence, c.created_at, c.model_used, u.email
+            FROM classifications c
+            JOIN users u ON u.id = c.user_id
+            ORDER BY c.id DESC
+            """
+        ).fetchall()
+    else:
+        rows = conn.execute(
+            """
+            SELECT tweet, category, confidence, created_at, model_used
+            FROM classifications
+            WHERE user_id = ?
+            ORDER BY id DESC
+            """,
+            (session.get("user_id"),),
+        ).fetchall()
+    conn.close()
+
+    output = io.StringIO()
+    writer = csv.writer(output)
+    if scope == "all" and session.get("role") == "admin":
+        writer.writerow(["tweet", "category", "confidence", "created_at", "model_used", "email"])
+    else:
+        writer.writerow(["tweet", "category", "confidence", "created_at", "model_used"])
+    for row in rows:
+        writer.writerow(list(row))
+
+    return app.response_class(output.getvalue(), mimetype="text/csv")
+
+
+@app.get("/api/export/pdf")
+def export_pdf():
+    if "user_id" not in session:
+        return jsonify({"message": "Authentication required."}), 401
+
+    scope = request.args.get("scope", "mine")
+    stats_payload = stats().get_json()
+    if scope != "all" or session.get("role") != "admin":
+        stats_payload = stats_payload
+
+    buffer = io.BytesIO()
+    pdf = canvas.Canvas(buffer, pagesize=letter)
+    width, height = letter
+
+    pdf.setTitle("Disaster Tweet Classification Report")
+    pdf.setFont("Helvetica-Bold", 16)
+    pdf.drawString(40, height - 50, "Disaster Tweet Classification Report")
+
+    pdf.setFont("Helvetica", 11)
+    pdf.drawString(40, height - 75, f"Generated: {now_utc_iso()}")
+    pdf.drawString(40, height - 92, f"Scope: {scope}")
+
+    pdf.setFont("Helvetica-Bold", 12)
+    pdf.drawString(40, height - 125, "Summary")
+    pdf.setFont("Helvetica", 11)
+    pdf.drawString(40, height - 145, f"Total classified: {stats_payload.get('total', 0)}")
+    pdf.drawString(40, height - 162, f"Average confidence: {stats_payload.get('avg_confidence', 0)}%")
+
+    pdf.setFont("Helvetica-Bold", 12)
+    pdf.drawString(40, height - 195, "By Category")
+    pdf.setFont("Helvetica", 11)
+    y = height - 215
+    for category, count in stats_payload.get("by_category", {}).items():
+        pdf.drawString(50, y, f"{category}: {count}")
+        y -= 16
+
+    pdf.showPage()
+    pdf.save()
+    buffer.seek(0)
+
+    return app.response_class(buffer.read(), mimetype="application/pdf")
 
 
 @app.post("/api/logout")
