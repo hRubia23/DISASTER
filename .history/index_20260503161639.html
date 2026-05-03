@@ -1,0 +1,137 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Disaster Tweet Classifier</title>
+  <link rel="stylesheet" href="styles.css" />
+</head>
+<body data-auth-required="true">
+  <div class="page-wrap">
+    <div class="app-shell">
+      <aside class="side-nav">
+        <div class="brand brand-stack">
+          <div class="alert-logo"></div>
+          <div>
+            <h1>Disaster Tweet Classifier</h1>
+            <span>AI-powered emergency triage</span>
+          </div>
+        </div>
+
+        <nav class="nav-stack">
+          <a class="nav-item nav-item-active" href="index.html">Classify</a>
+          <a class="nav-item" href="dashboard.html" data-role="admin">Dashboard</a>
+        </nav>
+
+        <div class="side-meta">
+          <span class="user-greeting" id="userGreeting"></span>
+          <button class="btn btn-outline" id="logoutBtn" type="button">Logout</button>
+        </div>
+      </aside>
+
+      <main class="main-feed">
+        <section class="feed-card">
+          <div class="feed-header">
+            <div>
+              <h2>Emergency Tweet Classification</h2>
+              <p class="subtle">
+                Classify disaster-related tweets and prioritize emergency responses in real-time.
+                Identify rescue requests, damage reports, safety updates, and general information quickly and reliably.
+              </p>
+            </div>
+            <div class="hero-actions">
+              <button class="btn btn-primary" id="singleModeBtn">Single Tweet</button>
+              <button class="btn btn-secondary" id="batchModeBtn" data-role="admin">Batch Upload</button>
+            </div>
+          </div>
+
+          <div id="singleView" class="composer">
+            <div class="composer-head">
+              <h3>Enter Tweet Text</h3>
+              <span class="composer-meta">Instant classification</span>
+            </div>
+            <textarea id="tweetInput" class="input-area" placeholder="Example: Family trapped on rooftop near Central Bridge, flood waters rising fast. Need rescue now."></textarea>
+            <div class="composer-actions">
+              <button class="btn btn-primary" id="classifyBtn">Classify Tweet</button>
+            </div>
+
+            <div class="examples">
+              <h3>Example Tweets</h3>
+              <div class="examples-list">
+                <button class="example-item" type="button">URGENT: 3 people trapped inside a collapsed building near Maple Street. Need rescue teams now!</button>
+                <button class="example-item" type="button">Bridge on Highway 7 has severe structural damage after earthquake. Avoid the area.</button>
+                <button class="example-item" type="button">Relief camp at City Hall now open with food and medical support for evacuees.</button>
+                <button class="example-item" type="button">Heavy rain expected for next 12 hours in coastal districts, stay alert for flooding.</button>
+              </div>
+            </div>
+          </div>
+
+          <div id="batchView" class="hidden composer" data-role="admin">
+            <div class="composer-head">
+              <h3>Batch Upload</h3>
+              <span class="composer-meta">CSV or text file</span>
+            </div>
+            <p class="subtle">Upload a text file or CSV with one tweet per line.</p>
+            <input id="batchFileInput" class="batch-file-input" type="file" accept=".txt,.csv,text/plain,text/csv" />
+            <div id="batchDropzone" class="batch-dropzone" role="button" tabindex="0" aria-label="Upload TXT or CSV file">
+              <div class="upload-icon">^</div>
+              <p class="upload-title">Click to upload or drag and drop</p>
+              <p class="upload-caption">TXT or CSV files (one tweet per line)</p>
+              <button type="button" class="btn btn-primary" id="selectBatchFileBtn">Upload File</button>
+            </div>
+            <div class="batch-status" id="batchStatus">No file selected.</div>
+            <button class="btn btn-primary" id="classifyBatchBtn" type="button">Classify Batch</button>
+          </div>
+        </section>
+
+        <section class="feed-card feed-stream">
+          <div class="feed-stream-head">
+            <h3>Live Classification Feed</h3>
+            <span class="feed-stream-meta">Latest activity</span>
+          </div>
+          <div class="feed-list" id="liveFeed">
+            <p class="feed-empty">No classified tweets yet. Submit one to see it here.</p>
+          </div>
+        </section>
+      </main>
+
+      <aside class="side-panel">
+        <section class="card">
+          <h3>Classification Categories</h3>
+          <p class="subtle">Color-coded labels help responders act quickly.</p>
+          <div class="category-stack">
+            <div class="category-pill cat-red">
+              <strong>🔴 Rescue Request</strong>
+              <p>Someone needs immediate help.</p>
+            </div>
+            <div class="category-pill cat-yellow">
+              <strong>🟡 Damage Report</strong>
+              <p>Infrastructure/property damage info.</p>
+            </div>
+            <div class="category-pill cat-green">
+              <strong>🟢 Safety Update</strong>
+              <p>Evacuation notices, relief distribution.</p>
+            </div>
+            <div class="category-pill cat-gray">
+              <strong>⚪ General Information</strong>
+              <p>Non-urgent news/updates.</p>
+            </div>
+          </div>
+        </section>
+
+        <section class="card">
+          <h3>How It Works</h3>
+          <ol class="steps-compact">
+            <li>Text preprocessing removes noise and normalizes language.</li>
+            <li>TF-IDF vectorization transforms tweet text into numeric features.</li>
+            <li>Machine learning model predicts the disaster category.</li>
+            <li>Priority alerting highlights urgent cases for emergency teams.</li>
+          </ol>
+        </section>
+      </aside>
+    </div>
+  </div>
+
+  <script src="script.js"></script>
+</body>
+</html>

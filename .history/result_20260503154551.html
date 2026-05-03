@@ -1,0 +1,84 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Classification Result</title>
+  <link rel="stylesheet" href="styles.css" />
+</head>
+<body data-auth-required="true">
+  <div class="page-wrap fade-in">
+    <nav class="top-nav">
+      <div class="brand">
+        <div class="alert-logo"></div>
+        <div>
+          <h2>Disaster Tweet Classifier</h2>
+          <span>Result overview</span>
+        </div>
+      </div>
+      <button class="nav-toggle" id="navToggle" type="button" aria-label="Toggle navigation" aria-expanded="false" aria-controls="primaryNav">
+        <span></span>
+        <span></span>
+        <span></span>
+      </button>
+      <div class="nav-links" id="primaryNav">
+        <a class="btn btn-secondary" href="index.html">Classify</a>
+        <a class="btn btn-secondary" href="dashboard.html" data-role="admin">Dashboard</a>
+        <span class="user-greeting" id="userGreeting"></span>
+        <button class="btn btn-outline" id="logoutBtn" type="button">Logout</button>
+      </div>
+    </nav>
+
+    <section class="urgent-banner banner-red" id="alertBanner">
+      <div class="urgent-icon">!</div>
+      <div>
+        <strong id="bannerTitle">URGENT RESCUE REQUEST DETECTED</strong><br />
+        <span id="bannerMessage">This tweet requires immediate attention from emergency responders.</span>
+      </div>
+    </section>
+
+    <article class="card">
+      <div class="result-header">
+        <div>
+          <h3>Classification Result</h3>
+          <p class="subtle">Analysis completed and categorized successfully.</p>
+        </div>
+        <span class="success-chip">✓ Classification successful</span>
+      </div>
+
+      <div class="result-grid">
+        <section>
+          <p class="section-label">Original Tweet</p>
+          <div class="tweet-box" id="tweetPreview">
+            Family of five trapped on rooftop near Riverbank Colony. Water level is rising rapidly and children are stranded. Please send immediate rescue boats.
+          </div>
+        </section>
+
+        <section>
+          <p class="section-label">Detected Category</p>
+          <div class="detected">
+            <span class="badge badge-red">⚠ Rescue Request</span>
+            <strong>Confidence: 86.6%</strong>
+          </div>
+          <p class="subtle">Someone needs immediate help.</p>
+        </section>
+
+        <section>
+          <p class="section-label">Confidence Score</p>
+          <div class="progress-wrap">
+            <div class="progress"><span style="width: 86.6%;"></span></div>
+            <p class="result-note">This prediction has good reliability for rapid field response.</p>
+          </div>
+        </section>
+      </div>
+
+      <p class="timestamp" id="resultTimestamp"></p>
+      <div class="result-actions">
+        <button class="btn btn-outline" id="flagBtn" type="button">Flag for review</button>
+      </div>
+    </article>
+  </div>
+
+  <script src="script.js"></script>
+</body>
+</html>

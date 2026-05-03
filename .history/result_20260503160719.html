@@ -1,0 +1,115 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Classification Result</title>
+  <link rel="stylesheet" href="styles.css" />
+</head>
+<body data-auth-required="true">
+  <div class="page-wrap fade-in">
+    <div class="app-shell">
+      <aside class="side-nav">
+        <div class="brand brand-stack">
+          <div class="alert-logo"></div>
+          <div>
+            <h1>Disaster Tweet Classifier</h1>
+            <span>Result overview</span>
+          </div>
+        </div>
+
+        <nav class="nav-stack">
+          <a class="nav-item" href="index.html">Classify</a>
+          <a class="nav-item" href="dashboard.html" data-role="admin">Dashboard</a>
+        </nav>
+
+        <div class="side-meta">
+          <span class="user-greeting" id="userGreeting"></span>
+          <button class="btn btn-outline" id="logoutBtn" type="button">Logout</button>
+        </div>
+      </aside>
+
+      <main class="main-feed">
+        <section class="feed-card detail-card">
+          <div class="detail-head">
+            <div>
+              <h2>Classification Detail</h2>
+              <p class="subtle">Admin-only view of a classified tweet.</p>
+            </div>
+            <span class="detail-chip">Admin view</span>
+          </div>
+
+          <article class="detail-post">
+            <div class="detail-post-head">
+              <div class="feed-avatar">!</div>
+              <div>
+                <div class="feed-title">Disaster Triage</div>
+                <div class="feed-time" id="resultTimestamp">Just now</div>
+              </div>
+            </div>
+            <p class="feed-text" id="tweetPreview">
+              Family of five trapped on rooftop near Riverbank Colony. Water level is rising rapidly and children are stranded. Please send immediate rescue boats.
+            </p>
+          </article>
+
+          <section class="detail-summary">
+            <div class="detail-block">
+              <p class="section-label">Detected Category</p>
+              <div class="detected">
+                <span class="badge badge-red">⚠ Rescue Request</span>
+                <strong>Confidence: 86.6%</strong>
+              </div>
+              <p class="subtle">Someone needs immediate help.</p>
+            </div>
+
+            <div class="detail-block">
+              <p class="section-label">Confidence Score</p>
+              <div class="progress-wrap">
+                <div class="progress"><span style="width: 86.6%;"></span></div>
+                <p class="result-note">This prediction has good reliability for rapid field response.</p>
+              </div>
+            </div>
+          </section>
+
+          <section class="urgent-banner banner-red" id="alertBanner">
+            <div class="urgent-icon">!</div>
+            <div>
+              <strong id="bannerTitle">URGENT RESCUE REQUEST DETECTED</strong><br />
+              <span id="bannerMessage">This tweet requires immediate attention from emergency responders.</span>
+            </div>
+          </section>
+
+          <div class="result-actions">
+            <button class="btn btn-outline" id="flagBtn" type="button">Flag for review</button>
+          </div>
+        </section>
+      </main>
+
+      <aside class="side-panel">
+        <section class="card">
+          <h3>Response Checklist</h3>
+          <p class="subtle">Use this to guide immediate triage decisions.</p>
+          <ol class="steps-compact">
+            <li>Verify location and urgency indicators.</li>
+            <li>Confirm resource availability for response.</li>
+            <li>Escalate if rescue or medical support is needed.</li>
+            <li>Log action taken for reporting.</li>
+          </ol>
+        </section>
+
+        <section class="card">
+          <h3>How It Works</h3>
+          <ol class="steps-compact">
+            <li>Text preprocessing removes noise and normalizes language.</li>
+            <li>TF-IDF vectorization transforms text into numeric features.</li>
+            <li>ML model predicts the disaster category.</li>
+            <li>Priority alerting highlights urgent cases.</li>
+          </ol>
+        </section>
+      </aside>
+    </div>
+  </div>
+
+  <script src="script.js"></script>
+</body>
+</html>
