@@ -21,6 +21,7 @@ let currentUserName = '';
 let currentUserId = null;
 const LEGACY_STORAGE_KEY = 'classifications';
 const DASHBOARD_REFRESH_KEY = 'dashboard_refresh';
+const DASHBOARD_CHANNEL = 'dashboard_updates';
 
 async function getCurrentSessionUser() {
   if (window.location.protocol === 'file:') {
@@ -599,6 +600,16 @@ function notifyDashboardRefresh() {
     localStorage.setItem(DASHBOARD_REFRESH_KEY, String(Date.now()));
   } catch (error) {
     // Ignore storage errors.
+  }
+
+  if (typeof BroadcastChannel !== 'undefined') {
+    try {
+      const channel = new BroadcastChannel(DASHBOARD_CHANNEL);
+      channel.postMessage({ type: 'refresh', ts: Date.now() });
+      channel.close();
+    } catch (error) {
+      // Ignore broadcast errors.
+    }
   }
 }
 
@@ -1616,6 +1627,15 @@ if (document.getElementById('historyList')) {
       loadDashboard();
     }
   });
+
+  if (typeof BroadcastChannel !== 'undefined') {
+    const channel = new BroadcastChannel(DASHBOARD_CHANNEL);
+    channel.addEventListener('message', (event) => {
+      if (event?.data?.type === 'refresh') {
+        loadDashboard();
+      }
+    });
+  }
 }
 
 const clearAllBtn = document.getElementById('clearAllBtn');
