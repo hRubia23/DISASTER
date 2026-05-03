@@ -18,6 +18,7 @@ const liveFeed = document.getElementById('liveFeed');
 const feedSeenIds = new Set();
 let currentUserRole = 'viewer';
 let currentUserName = '';
+let currentUserId = null;
 
 async function getCurrentSessionUser() {
   if (window.location.protocol === 'file:') {
@@ -56,6 +57,7 @@ async function initAuthGuard() {
   if (user) {
     currentUserRole = user.role || 'viewer';
     currentUserName = user.full_name || '';
+    currentUserId = user.id || null;
     document.body.dataset.role = currentUserRole;
     const adminOnly = document.querySelectorAll('[data-role="admin"]');
     adminOnly.forEach((el) => {
@@ -533,6 +535,54 @@ function getFeedKey(record) {
   return String(record.classification_id || record.id || `${record.created_at || record.timestamp || ''}:${record.tweet}`);
 }
 
+function getLocalStorageKey() {
+  if (currentUserId) {
+    return `classifications_${currentUserId}`;
+  }
+  return 'classifications';
+}
+
+function readLocalClassifications() {
+  try {
+    return JSON.parse(localStorage.getItem(getLocalStorageKey()) || '[]');
+  } catch (error) {
+    return [];
+  }
+}
+
+function writeLocalClassifications(records) {
+  try {
+    localStorage.setItem(getLocalStorageKey(), JSON.stringify(records));
+  } catch (error) {
+    // Ignore storage errors.
+  }
+}
+
+function storeLocalClassification(record) {
+  const existing = readLocalClassifications();
+  const key = getFeedKey(record);
+  const filtered = existing.filter((item) => getFeedKey(item) !== key);
+  filtered.unshift(record);
+  writeLocalClassifications(filtered.slice(0, 100));
+}
+
+function mergeFeedItems(serverItems, localItems) {
+  const seen = new Set();
+  const combined = [];
+  const addItem = (item) => {
+    const key = getFeedKey(item);
+    if (seen.has(key)) {
+      return;
+    }
+    seen.add(key);
+    combined.push(item);
+  };
+
+  serverItems.forEach(addItem);
+  localItems.forEach(addItem);
+  return combined;
+}
+
 function prependFeedItems(records) {
   if (!liveFeed || !records || records.length === 0) {
     return;
@@ -558,7 +608,7 @@ async function loadLiveFeed() {
     return;
   }
   if (window.location.protocol === 'file:') {
-    const saved = JSON.parse(localStorage.getItem('classifications') || '[]');
+    const saved = readLocalClassifications();
     if (saved.length > 0) {
       prependFeedItems(saved.slice(0, 10));
     }
@@ -573,8 +623,10 @@ async function loadLiveFeed() {
     }
     const payload = await response.json();
     const items = payload.items || [];
-    if (items.length > 0) {
-      prependFeedItems(items.reverse());
+    const saved = readLocalClassifications();
+    const combined = mergeFeedItems(items, saved);
+    if (combined.length > 0) {
+      prependFeedItems(combined.reverse());
     }
   } catch (error) {
     // Ignore feed errors.
@@ -918,18 +970,20 @@ async function handleClassifyAction() {
         tweetInput.value = batchTweets[0];
       }
       if (results.length > 0) {
-        prependFeedItems(results.map((item) => ({
+        const records = results.map((item) => ({
           tweet: item.tweet,
           category: item.category,
           confidence: item.confidence,
           classification_id: item.classification_id,
-          created_at: new Date().toISOString()
-        })).reverse());
+          created_at: new Date().toISOString(),
+          full_name: currentUserName
+        }));
+        records.forEach((record) => storeLocalClassification(record));
+        prependFeedItems(records.reverse());
         return;
       }
     } catch (error) {
       // Fall back to local heuristic + localStorage.
-      const existing = JSON.parse(localStorage.getItem('classifications') || '[]');
       const now = Date.now();
       const records = await Promise.all(batchTweets.map(async (tweet, index) => {
         const classification = await classifyTweetWithServer(tweet);
@@ -938,10 +992,11 @@ async function handleClassifyAction() {
           category: classification.category,
           confidence: classification.confidence,
           timestamp: new Date(now + index).toISOString(),
-          emoji: classification.categoryEmoji
+          emoji: classification.categoryEmoji,
+          full_name: currentUserName
         };
       }));
-      localStorage.setItem('classifications', JSON.stringify([...records, ...existing]));
+      records.forEach((record) => storeLocalClassification(record));
       prependFeedItems(records.reverse());
       return;
     }
@@ -951,15 +1006,16 @@ async function handleClassifyAction() {
   const classification = await classifyTweetWithServer(tweet);
 
   if (classification && classification.classification_id) {
-    prependFeedItems([
-      {
-        tweet,
-        category: classification.category,
-        confidence: classification.confidence,
-        classification_id: classification.classification_id,
-        created_at: new Date().toISOString()
-      }
-    ]);
+    const record = {
+      tweet,
+      category: classification.category,
+      confidence: classification.confidence,
+      classification_id: classification.classification_id,
+      created_at: new Date().toISOString(),
+      full_name: currentUserName
+    };
+    storeLocalClassification(record);
+    prependFeedItems([record]);
     return;
   }
 
@@ -971,9 +1027,7 @@ async function handleClassifyAction() {
     emoji: classification.categoryEmoji
   };
 
-  const classifications = JSON.parse(localStorage.getItem('classifications') || '[]');
-  classifications.unshift(record);
-  localStorage.setItem('classifications', JSON.stringify(classifications));
+  storeLocalClassification(record);
   prependFeedItems([record]);
 }
 
