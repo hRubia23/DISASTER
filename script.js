@@ -1594,6 +1594,7 @@ async function loadDashboard() {
 if (document.getElementById('historyList')) {
   authReady.then(() => {
     loadDashboard();
+    setInterval(loadDashboard, 15000);
   });
 }
 
