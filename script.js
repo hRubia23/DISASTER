@@ -19,6 +19,7 @@ const feedSeenIds = new Set();
 let currentUserRole = 'viewer';
 let currentUserName = '';
 let currentUserId = null;
+const LEGACY_STORAGE_KEY = 'classifications';
 
 async function getCurrentSessionUser() {
   if (window.location.protocol === 'file:') {
@@ -539,12 +540,21 @@ function getLocalStorageKey() {
   if (currentUserId) {
     return `classifications_${currentUserId}`;
   }
-  return 'classifications';
+  return LEGACY_STORAGE_KEY;
 }
 
 function readLocalClassifications() {
   try {
-    return JSON.parse(localStorage.getItem(getLocalStorageKey()) || '[]');
+    const userKey = getLocalStorageKey();
+    const primary = JSON.parse(localStorage.getItem(userKey) || '[]');
+    if (currentUserId && primary.length === 0) {
+      const legacy = JSON.parse(localStorage.getItem(LEGACY_STORAGE_KEY) || '[]');
+      if (legacy.length > 0) {
+        localStorage.setItem(userKey, JSON.stringify(legacy));
+        return legacy;
+      }
+    }
+    return primary;
   } catch (error) {
     return [];
   }
