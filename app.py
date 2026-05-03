@@ -770,8 +770,32 @@ def clear_history():
     if "user_id" not in session:
         return jsonify({"message": "Authentication required."}), 401
 
+    scope = request.args.get("scope", "mine")
     conn = get_connection()
-    conn.execute("DELETE FROM classifications WHERE user_id = ?", (session.get("user_id"),))
+
+    if scope == "all" and session.get("role") == "admin":
+        conn.execute("DELETE FROM replies")
+        conn.execute("DELETE FROM likes")
+        conn.execute("DELETE FROM reposts")
+        conn.execute("DELETE FROM flags")
+        conn.execute("DELETE FROM classifications")
+    else:
+        user_id = session.get("user_id")
+        ids = [
+            row["id"]
+            for row in conn.execute(
+                "SELECT id FROM classifications WHERE user_id = ?",
+                (user_id,),
+            ).fetchall()
+        ]
+        if ids:
+            placeholders = ",".join("?" * len(ids))
+            conn.execute(f"DELETE FROM replies WHERE classification_id IN ({placeholders})", ids)
+            conn.execute(f"DELETE FROM likes WHERE classification_id IN ({placeholders})", ids)
+            conn.execute(f"DELETE FROM reposts WHERE classification_id IN ({placeholders})", ids)
+            conn.execute(f"DELETE FROM flags WHERE classification_id IN ({placeholders})", ids)
+        conn.execute("DELETE FROM classifications WHERE user_id = ?", (user_id,))
+
     conn.commit()
     conn.close()
     return jsonify({"message": "History cleared."})

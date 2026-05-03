@@ -1629,7 +1629,9 @@ if (clearAllBtn) {
       window.location.reload();
       return;
     }
-    await fetch('/api/history/clear', { method: 'POST', credentials: 'include' });
+    const scopeParam = currentUserRole === 'admin' ? 'all' : 'mine';
+    await fetch(`/api/history/clear?scope=${scopeParam}`, { method: 'POST', credentials: 'include' });
+    notifyDashboardRefresh();
     window.location.reload();
   });
 }
