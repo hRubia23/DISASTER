@@ -410,6 +410,73 @@ async function handleShareAction(record) {
   }
 }
 
+function updatePostActionCount(countEl, count, isActive, btnEl) {
+  if (countEl) {
+    countEl.textContent = String(count ?? 0);
+  }
+  if (btnEl) {
+    btnEl.classList.toggle('is-active', Boolean(isActive));
+  }
+}
+
+async function handlePostToggleAction(record, action, countEl, btnEl) {
+  const id = record.classification_id || record.id;
+  if (!id || window.location.protocol === 'file:') {
+    return;
+  }
+
+  try {
+    const response = await fetch(`/api/classifications/${encodeURIComponent(id)}/${action}`, {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json'
+      },
+      credentials: 'include'
+    });
+    if (!response.ok) {
+      return;
+    }
+    const payload = await response.json();
+    if (action === 'like') {
+      updatePostActionCount(countEl, payload.like_count, payload.liked, btnEl);
+    } else if (action === 'repost') {
+      updatePostActionCount(countEl, payload.repost_count, payload.reposted, btnEl);
+    }
+  } catch (error) {
+    // Ignore toggle errors.
+  }
+}
+
+async function handlePostReplyAction(record, countEl) {
+  const id = record.classification_id || record.id;
+  if (!id || window.location.protocol === 'file:') {
+    return;
+  }
+
+  const reply = window.prompt('Write a reply');
+  if (!reply) {
+    return;
+  }
+
+  try {
+    const response = await fetch(`/api/classifications/${encodeURIComponent(id)}/reply`, {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json'
+      },
+      credentials: 'include',
+      body: JSON.stringify({ reply })
+    });
+    if (!response.ok) {
+      return;
+    }
+    const payload = await response.json();
+    updatePostActionCount(countEl, payload.reply_count, false, null);
+  } catch (error) {
+    // Ignore reply errors.
+  }
+}
+
 function getFeedKey(record) {
   return String(record.classification_id || record.id || `${record.created_at || record.timestamp || ''}:${record.tweet}`);
 }
@@ -468,6 +535,9 @@ async function initPostView() {
   const postTime = document.getElementById('postTime');
   const postAuthor = document.getElementById('postAuthor');
   const backBtn = document.getElementById('backBtn');
+  const actionButtons = document.querySelectorAll('.post-actions .icon-btn');
+  const replyInput = document.querySelector('.post-reply .reply-input');
+  const replySubmit = document.querySelector('.post-reply .btn');
 
   if (!postBody || !postText) {
     return;
@@ -487,6 +557,23 @@ async function initPostView() {
   const tweetParam = params.get('tweet');
   const timeParam = params.get('time');
   const idParam = params.get('id');
+  const postRecord = { id: idParam };
+
+  const setDisabled = (disabled) => {
+    actionButtons.forEach((button) => {
+      button.disabled = disabled;
+    });
+    if (replyInput) {
+      replyInput.disabled = disabled;
+    }
+    if (replySubmit) {
+      replySubmit.disabled = disabled;
+    }
+  };
+
+  if (!idParam || currentUserRole === 'admin' || window.location.protocol === 'file:') {
+    setDisabled(true);
+  }
 
   if (tweetParam) {
     postText.textContent = decodeURIComponent(tweetParam);
@@ -498,6 +585,34 @@ async function initPostView() {
 
   if (timeParam && postTime) {
     postTime.textContent = formatRelativeTime(timeParam);
+  }
+
+  actionButtons.forEach((button) => {
+    const action = button.dataset.action;
+    const countEl = button.querySelector('.post-action-count');
+    if (!action) {
+      return;
+    }
+
+    if (action === 'like') {
+      button.addEventListener('click', () => handlePostToggleAction(postRecord, 'like', countEl, button));
+    }
+    if (action === 'repost') {
+      button.addEventListener('click', () => handlePostToggleAction(postRecord, 'repost', countEl, button));
+    }
+    if (action === 'reply') {
+      button.addEventListener('click', () => handlePostReplyAction(postRecord, countEl));
+    }
+    if (action === 'share') {
+      button.addEventListener('click', () => handleShareAction(postRecord));
+    }
+  });
+
+  if (replySubmit) {
+    replySubmit.addEventListener('click', () => {
+      const countEl = document.querySelector('.post-action-count[data-action="reply"]');
+      handlePostReplyAction(postRecord, countEl);
+    });
   }
 
   if (!tweetParam && idParam && window.location.protocol !== 'file:') {
@@ -515,6 +630,20 @@ async function initPostView() {
         }
         if (payload?.created_at && postTime) {
           postTime.textContent = formatRelativeTime(payload.created_at);
+        }
+        if (payload?.like_count !== undefined) {
+          const likeEl = document.querySelector('.post-action-count[data-action="like"]');
+          const likeBtn = document.querySelector('.icon-btn[data-action="like"]');
+          updatePostActionCount(likeEl, payload.like_count, payload.liked_by_me, likeBtn);
+        }
+        if (payload?.repost_count !== undefined) {
+          const repostEl = document.querySelector('.post-action-count[data-action="repost"]');
+          const repostBtn = document.querySelector('.icon-btn[data-action="repost"]');
+          updatePostActionCount(repostEl, payload.repost_count, payload.reposted_by_me, repostBtn);
+        }
+        if (payload?.reply_count !== undefined) {
+          const replyEl = document.querySelector('.post-action-count[data-action="reply"]');
+          updatePostActionCount(replyEl, payload.reply_count, false, null);
         }
         return;
       }

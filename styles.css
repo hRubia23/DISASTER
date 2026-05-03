@@ -367,6 +367,10 @@ a {
   border: none;
   padding: 0;
   cursor: pointer;
+  display: inline-flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 6px;
 }
 
 .icon-circle {
@@ -387,6 +391,23 @@ a {
   background: #f1f5fb;
   border-color: #cdd6e1;
   transform: translateY(-1px);
+}
+
+.icon-btn.is-active .icon-circle {
+  background: #1f2937;
+  border-color: #1f2937;
+  color: #ffffff;
+}
+
+.post-action-count {
+  font-size: 0.76rem;
+  font-weight: 700;
+  color: #42526b;
+}
+
+.icon-btn[disabled] {
+  cursor: not-allowed;
+  opacity: 0.55;
 }
 
 .post-reply {
