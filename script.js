@@ -262,20 +262,12 @@ function buildFeedItem(record) {
     actions.classList.add('feed-action-bar');
     const likeCount = Number(record.like_count || 0);
     const replyCount = Number(record.reply_count || 0);
-    const repostCount = Number(record.repost_count || 0);
     const likeBtn = buildFeedActionButton('Like', likeCount, Boolean(record.liked_by_me));
     const replyBtn = buildFeedActionButton('Reply', replyCount, false);
-    const repostBtn = buildFeedActionButton('Repost', repostCount, Boolean(record.reposted_by_me));
-    const shareBtn = buildFeedActionButton('Share', 0, false, true);
 
     likeBtn.addEventListener('click', (event) => {
       event.stopPropagation();
       handleToggleAction(record, 'like', likeBtn);
-    });
-
-    repostBtn.addEventListener('click', (event) => {
-      event.stopPropagation();
-      handleToggleAction(record, 'repost', repostBtn);
     });
 
     replyBtn.addEventListener('click', (event) => {
@@ -283,15 +275,8 @@ function buildFeedItem(record) {
       handleReplyAction(record, replyBtn);
     });
 
-    shareBtn.addEventListener('click', (event) => {
-      event.stopPropagation();
-      handleShareAction(record);
-    });
-
     actions.appendChild(replyBtn);
-    actions.appendChild(repostBtn);
     actions.appendChild(likeBtn);
-    actions.appendChild(shareBtn);
   }
 
   if (!isAdmin) {
