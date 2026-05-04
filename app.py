@@ -689,20 +689,17 @@ def add_reply(classification_id: int):
     if "user_id" not in session:
         return jsonify({"message": "Authentication required."}), 401
 
-    if session.get("role") == "admin":
-        return jsonify({"message": "Admins cannot reply."}), 403
-
     data = request.get_json(silent=True) or {}
     reply_text = str(data.get("reply", "")).strip()
     if len(reply_text) < 2:
         return jsonify({"message": "Reply must be at least 2 characters."}), 400
 
     conn = get_connection()
-    owned = conn.execute(
-        "SELECT 1 FROM classifications WHERE id = ? AND user_id = ?",
-        (classification_id, session.get("user_id")),
+    exists = conn.execute(
+        "SELECT 1 FROM classifications WHERE id = ?",
+        (classification_id,),
     ).fetchone()
-    if not owned:
+    if not exists:
         conn.close()
         return jsonify({"message": "Classification not found."}), 404
 
