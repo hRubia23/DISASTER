@@ -717,7 +717,7 @@ async function initPostView() {
     }
   };
 
-  if (!idParam || currentUserRole === 'admin' || window.location.protocol === 'file:') {
+  if (!idParam || window.location.protocol === 'file:') {
     setDisabled(true);
   }
 
@@ -726,7 +726,7 @@ async function initPostView() {
   }
 
   if (postAuthor) {
-    postAuthor.textContent = currentUserName || 'Disaster Triage';
+    postAuthor.textContent = 'Disaster Triage';
   }
 
   if (timeParam && postTime) {
