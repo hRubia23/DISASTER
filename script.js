@@ -256,6 +256,26 @@ function buildFeedItem(record) {
 
     actions.appendChild(confidence);
     actions.appendChild(viewLink);
+
+    // Admin also gets Reply and Like
+    actions.classList.add('feed-action-bar');
+    const likeCount = Number(record.like_count || 0);
+    const replyCount = Number(record.reply_count || 0);
+    const likeBtn = buildFeedActionButton('Like', likeCount, Boolean(record.liked_by_me));
+    const replyBtn = buildFeedActionButton('Reply', replyCount, false);
+
+    likeBtn.addEventListener('click', (event) => {
+      event.stopPropagation();
+      handleToggleAction(record, 'like', likeBtn);
+    });
+
+    replyBtn.addEventListener('click', (event) => {
+      event.stopPropagation();
+      handleReplyAction(record, replyBtn);
+    });
+
+    actions.appendChild(replyBtn);
+    actions.appendChild(likeBtn);
   }
 
   if (!isAdmin) {
