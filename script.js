@@ -1126,10 +1126,107 @@ if (classifyBatchBtn) {
 function classifyTweet(text) {
   const lowerText = text.toLowerCase();
   
-  const rescueKeywords = ['trapped', 'rescue', 'help', 'stuck', 'stranded', 'need help', 'emergency', 'urgent', 'dying', 'drowning', 'flood'];
-  const damageKeywords = ['damage', 'destroyed', 'collapsed', 'broken', 'infrastructure', 'building', 'bridge', 'road', 'destroyed'];
-  const safetyKeywords = ['evacuation', 'shelter', 'relief', 'camp', 'safety', 'safe zone', 'emergency services', 'hospital'];
-  const generalKeywords = ['weather', 'rain', 'wind', 'alert', 'warning', 'update', 'report'];
+  const rescueKeywords = [
+    'trapped',
+    'rescue',
+    'help',
+    'stuck',
+    'stranded',
+    'need help',
+    'emergency',
+    'urgent',
+    'dying',
+    'drowning',
+    'flood',
+    'sagip',
+    'saklolo',
+    'tulong',
+    'naiipit',
+    'naipit',
+    'nakulong',
+    'nalulunod',
+    'baha',
+    'bahain',
+    'tabang',
+    'tabangi',
+    'socorro',
+    'ayuda',
+    'atrapa',
+    'naatrapa',
+    'naatrapado'
+  ];
+  const damageKeywords = [
+    'damage',
+    'destroyed',
+    'collapsed',
+    'broken',
+    'infrastructure',
+    'building',
+    'bridge',
+    'road',
+    'nasira',
+    'sirang',
+    'giba',
+    'guho',
+    'guhoan',
+    'nasunog',
+    'sunog',
+    'kalsada',
+    'tulay',
+    'guba',
+    'gibung',
+    'daot',
+    'calle',
+    'puente',
+    'edificio'
+  ];
+  const safetyKeywords = [
+    'evacuation',
+    'evacuate',
+    'evacuated',
+    'shelter',
+    'relief',
+    'camp',
+    'safety',
+    'safe zone',
+    'emergency services',
+    'hospital',
+    'lumikas',
+    'paglikas',
+    'evac center',
+    'evacuation center',
+    'evacuation camp',
+    'evacuation site',
+    'relief goods',
+    'relief operations',
+    'relief center',
+    'relief camp',
+    'evacuation area',
+    'evacuation',
+    'evac',
+    'evacuacion',
+    'albergue',
+    'centro de evacuacion',
+    'centro de refugio',
+    'clinica',
+    'balay tabang',
+    'balay kaluwasan',
+    'kaluwasan'
+  ];
+  const generalKeywords = [
+    'weather',
+    'rain',
+    'wind',
+    'alert',
+    'warning',
+    'update',
+    'report',
+    'balita',
+    'ulat',
+    'abiso',
+    'pahibalo',
+    'binalita'
+  ];
   
   let scores = {
     rescue: 0,
