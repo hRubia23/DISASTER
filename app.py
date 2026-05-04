@@ -384,11 +384,15 @@ def classify_text(text: str):
         confidence = 0.85
     category = _LABEL_MAP.get(raw_category, "General Information")
 
-    # Keyword post-processing override: if keywords detect a specific category,
-    # trust that over the ML model (handles local dialects & damage vs rescue confusion)
+    # Keyword post-processing override:
+    # - If keywords detect a specific category, use that (handles dialects & damage vs rescue)
+    # - If NO keywords match at all, default to General Information (don't trust ML alone
+    #   for vague phrases like "how is everybody?" or "be careful everyone")
     keyword_category = keyword_subcategory(text)
     if keyword_category != "General Information":
         category = keyword_category
+    else:
+        category = "General Information"
 
     return category, confidence, model_used
 
