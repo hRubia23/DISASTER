@@ -653,10 +653,8 @@ async function loadLiveFeed() {
     }
     const payload = await response.json();
     const items = payload.items || [];
-    const saved = readLocalClassifications();
-    const combined = mergeFeedItems(items, saved);
-    if (combined.length > 0) {
-      prependFeedItems(combined.reverse());
+    if (items.length > 0) {
+      prependFeedItems(items.reverse());
     }
   } catch (error) {
     // Ignore feed errors.
@@ -993,30 +991,26 @@ async function classifyTweetWithServer(text) {
     return classifyTweet(text);
   }
 
-  try {
-    const response = await fetch('/api/classify', {
-      method: 'POST',
-      headers: {
-        'Content-Type': 'application/json'
-      },
-      credentials: 'include',
-      body: JSON.stringify({ text })
-    });
+  const response = await fetch('/api/classify', {
+    method: 'POST',
+    headers: {
+      'Content-Type': 'application/json'
+    },
+    credentials: 'include',
+    body: JSON.stringify({ text })
+  });
 
-    if (!response.ok) {
-      throw new Error('classification failed');
-    }
-
-    const payload = await response.json();
-    if (!payload || !payload.category) {
-      throw new Error('invalid response');
-    }
-
-    return payload;
-  } catch (error) {
-    // Fallback to local heuristic (keeps demo working even if model missing).
-    return classifyTweet(text);
+  if (!response.ok) {
+    const errData = await response.json().catch(() => ({}));
+    throw new Error(errData.error || `Server error ${response.status}`);
   }
+
+  const payload = await response.json();
+  if (!payload || !payload.category) {
+    throw new Error('Invalid response from server');
+  }
+
+  return payload;
 }
 
 async function handleClassifyAction() {
@@ -1024,6 +1018,14 @@ async function handleClassifyAction() {
   const batchTweets = JSON.parse(localStorage.getItem('batchTweets') || '[]')
     .map((line) => String(line).trim())
     .filter((line) => line.length > 0);
+
+  const showClassifyError = (msg) => {
+    const resultSection = document.getElementById('resultSection');
+    if (resultSection) {
+      resultSection.innerHTML = `<div class="error-banner" style="color:#d32f2f;background:#fdecea;border-radius:8px;padding:12px 16px;margin-top:12px;">Classification failed: ${msg}. Please check your connection and try again.</div>`;
+      resultSection.classList.remove('hidden');
+    }
+  };
 
   if (isBatchMode && batchTweets.length > 0) {
     try {
@@ -1037,7 +1039,8 @@ async function handleClassifyAction() {
       });
 
       if (!response.ok) {
-        throw new Error('batch failed');
+        const errData = await response.json().catch(() => ({}));
+        throw new Error(errData.error || `Server error ${response.status}`);
       }
 
       const payload = await response.json();
@@ -1054,36 +1057,23 @@ async function handleClassifyAction() {
           created_at: new Date().toISOString(),
           full_name: currentUserName
         }));
-        records.forEach((record) => storeLocalClassification(record));
+        if (window.location.protocol === 'file:') {
+          records.forEach((record) => storeLocalClassification(record));
+        }
         prependFeedItems(records.reverse());
         notifyDashboardRefresh();
         return;
       }
     } catch (error) {
-      // Fall back to local heuristic + localStorage.
-      const now = Date.now();
-      const records = await Promise.all(batchTweets.map(async (tweet, index) => {
-        const classification = await classifyTweetWithServer(tweet);
-        return {
-          tweet,
-          category: classification.category,
-          confidence: classification.confidence,
-          timestamp: new Date(now + index).toISOString(),
-          emoji: classification.categoryEmoji,
-          full_name: currentUserName
-        };
-      }));
-      records.forEach((record) => storeLocalClassification(record));
-      prependFeedItems(records.reverse());
-      notifyDashboardRefresh();
+      showClassifyError(error.message);
       return;
     }
   }
 
   const tweet = (tweetInput?.value || '').trim() || DEFAULT_TWEET;
-  const classification = await classifyTweetWithServer(tweet);
 
-  if (classification && classification.classification_id) {
+  try {
+    const classification = await classifyTweetWithServer(tweet);
     const record = {
       tweet,
       category: classification.category,
@@ -1092,23 +1082,14 @@ async function handleClassifyAction() {
       created_at: new Date().toISOString(),
       full_name: currentUserName
     };
-    storeLocalClassification(record);
+    if (window.location.protocol === 'file:') {
+      storeLocalClassification(record);
+    }
     prependFeedItems([record]);
     notifyDashboardRefresh();
-    return;
+  } catch (error) {
+    showClassifyError(error.message);
   }
-
-  const record = {
-    tweet,
-    category: classification.category,
-    confidence: classification.confidence,
-    timestamp: new Date().toISOString(),
-    emoji: classification.categoryEmoji
-  };
-
-  storeLocalClassification(record);
-  prependFeedItems([record]);
-  notifyDashboardRefresh();
 }
 
 if (classifyBtn) {
