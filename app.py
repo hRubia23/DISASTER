@@ -40,121 +40,62 @@ def get_model():
 
 def keyword_subcategory(text: str) -> str:
     lower_text = text.lower()
-    rescue_keywords = [
-        "trapped",
-        "rescue",
-        "help",
-        "stuck",
-        "stranded",
-        "need help",
-        "emergency",
-        "urgent",
-        "dying",
-        "drowning",
-        "flood",
-        "sagip",
-        "saklolo",
-        "tulong",
-        "naiipit",
-        "naipit",
-        "nakulong",
-        "nalulunod",
-        "baha",
-        "bahain",
-        "tabang",
-        "tabangi",
-        "socorro",
-        "ayuda",
-        "atrapa",
-        "naatrapa",
-        "naatrapado",
-        # Tausug
-        "pagtabang",
-        "nalubog",
-        "napit",
-        "nasakitan",
-        "matay",
-        "lungsuran",
-        "tawhid tabang",
+
+    # Strong rescue: person is actively in immediate danger
+    strong_rescue_keywords = [
+        "trapped", "stuck", "stranded", "dying", "drowning",
+        "naiipit", "naipit", "nakulong", "nalulunod",
+        "nalubog", "napit", "matay", "lungsuran",
+        "atrapa", "naatrapa", "naatrapado",
+        "need help", "urgent rescue", "send rescue",
     ]
+    # Weak rescue: generic "help" words that could accompany any category
+    weak_rescue_keywords = [
+        "rescue", "help", "emergency", "urgent", "sagip", "saklolo",
+        "tulong", "tabang", "tabangi", "socorro", "ayuda",
+        "pagtabang", "nasakitan", "tawhid tabang",
+        "flood", "baha", "bahain",
+    ]
+    rescue_keywords = strong_rescue_keywords + weak_rescue_keywords
     damage_keywords = [
-        "damage",
-        "destroyed",
-        "collapsed",
-        "broken",
-        "infrastructure",
-        "building",
-        "bridge",
-        "road",
-        "nasira",
-        "sirang",
-        "giba",
-        "guho",
-        "guhoan",
-        "nasunog",
-        "sunog",
-        "kalsada",
-        "tulay",
-        "guba",
-        "gibung",
-        "daot",
-        "calle",
-        "puente",
-        "edificio",
+        "damage", "destroyed", "collapsed", "broken", "infrastructure",
+        "building", "bridge", "road",
+        "nasira", "sirang", "giba", "guho", "guhoan",
+        "nasunog", "sunog", "kalsada", "tulay",
+        "guba", "gibung", "daot", "naguba",
+        "calle", "puente", "edificio",
         # Tausug
-        "natumba",
-        "nalaglag",
-        "bangag",
-        "lupak",
-        "nasugad",
-        "nauba",
+        "natumba", "nalaglag", "bangag", "lupak", "nasugad", "nauba",
     ]
     safety_keywords = [
-        "evacuation",
-        "evacuate",
-        "evacuated",
-        "shelter",
-        "relief",
-        "camp",
-        "safety",
-        "safe zone",
-        "emergency services",
-        "hospital",
-        "lumikas",
-        "paglikas",
-        "evac center",
-        "evacuation center",
-        "evacuation camp",
-        "evacuation site",
-        "relief goods",
-        "relief operations",
-        "relief center",
-        "relief camp",
-        "evacuation area",
-        "evacuation",
-        "evac",
-        "evacuacion",
-        "albergue",
-        "centro de evacuacion",
-        "centro de refugio",
-        "clinica",
-        "balay tabang",
-        "balay kaluwasan",
-        "kaluwasan",
+        "evacuation", "evacuate", "evacuated", "shelter", "relief",
+        "camp", "safety", "safe zone", "emergency services", "hospital",
+        "lumikas", "paglikas",
+        "evac center", "evacuation center", "evacuation camp",
+        "evacuation site", "relief goods", "relief operations",
+        "relief center", "relief camp", "evacuation area", "evac",
+        "evacuacion", "albergue", "centro de evacuacion",
+        "centro de refugio", "clinica",
+        "balay tabang", "balay kaluwasan", "kaluwasan",
         # Tausug
-        "pagluwas",
-        "lumaas",
-        "sentro",
-        "higad",
-        "lugar kaluwasan",
-        "tabang lugal",
+        "pagluwas", "lumaas", "sentro", "higad",
+        "lugar kaluwasan", "tabang lugal",
     ]
 
+    strong_rescue = sum(1 for k in strong_rescue_keywords if k in lower_text)
     rescue = sum(1 for k in rescue_keywords if k in lower_text)
     damage = sum(1 for k in damage_keywords if k in lower_text)
     safety = sum(1 for k in safety_keywords if k in lower_text)
 
-    if rescue >= damage and rescue >= safety and rescue > 0:
+    # Only override to Rescue Request if there's a strong rescue signal,
+    # or if rescue clearly dominates with no competing damage signal
+    if strong_rescue > 0 and strong_rescue >= damage:
+        return "Rescue Request"
+    if damage > 0 and damage >= (rescue - strong_rescue):
+        # Damage matches outweigh weak-only rescue matches
+        if damage >= safety:
+            return "Damage Report"
+    if rescue > damage and rescue >= safety and rescue > 0:
         return "Rescue Request"
     if damage >= safety and damage > 0:
         return "Damage Report"

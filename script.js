@@ -1125,115 +1125,46 @@ if (classifyBatchBtn) {
 
 function classifyTweet(text) {
   const lowerText = text.toLowerCase();
-  
-  const rescueKeywords = [
-    'trapped',
-    'rescue',
-    'help',
-    'stuck',
-    'stranded',
-    'need help',
-    'emergency',
-    'urgent',
-    'dying',
-    'drowning',
-    'flood',
-    'sagip',
-    'saklolo',
-    'tulong',
-    'naiipit',
-    'naipit',
-    'nakulong',
-    'nalulunod',
-    'baha',
-    'bahain',
-    'tabang',
-    'tabangi',
-    'socorro',
-    'ayuda',
-    'atrapa',
-    'naatrapa',
-    'naatrapado',
-    // Tausug
-    'pagtabang',
-    'nalubog',
-    'napit',
-    'nasakitan',
-    'matay',
-    'lungsuran',
-    'tawhid tabang'
+
+  // Strong rescue: person actively in immediate danger
+  const strongRescueKeywords = [
+    'trapped', 'stuck', 'stranded', 'dying', 'drowning',
+    'naiipit', 'naipit', 'nakulong', 'nalulunod',
+    'nalubog', 'napit', 'matay', 'lungsuran',
+    'atrapa', 'naatrapa', 'naatrapado',
+    'need help', 'urgent rescue', 'send rescue'
   ];
+  // Weak rescue: generic help words
+  const weakRescueKeywords = [
+    'rescue', 'help', 'emergency', 'urgent', 'sagip', 'saklolo',
+    'tulong', 'tabang', 'tabangi', 'socorro', 'ayuda',
+    'pagtabang', 'nasakitan', 'tawhid tabang',
+    'flood', 'baha', 'bahain'
+  ];
+  const rescueKeywords = [...strongRescueKeywords, ...weakRescueKeywords];
   const damageKeywords = [
-    'damage',
-    'destroyed',
-    'collapsed',
-    'broken',
-    'infrastructure',
-    'building',
-    'bridge',
-    'road',
-    'nasira',
-    'sirang',
-    'giba',
-    'guho',
-    'guhoan',
-    'nasunog',
-    'sunog',
-    'kalsada',
-    'tulay',
-    'guba',
-    'gibung',
-    'daot',
-    'calle',
-    'puente',
-    'edificio',
+    'damage', 'destroyed', 'collapsed', 'broken', 'infrastructure',
+    'building', 'bridge', 'road',
+    'nasira', 'sirang', 'giba', 'guho', 'guhoan',
+    'nasunog', 'sunog', 'kalsada', 'tulay',
+    'guba', 'gibung', 'daot', 'naguba',
+    'calle', 'puente', 'edificio',
     // Tausug
-    'natumba',
-    'nalaglag',
-    'bangag',
-    'lupak',
-    'nasugad',
-    'nauba'
+    'natumba', 'nalaglag', 'bangag', 'lupak', 'nasugad', 'nauba'
   ];
   const safetyKeywords = [
-    'evacuation',
-    'evacuate',
-    'evacuated',
-    'shelter',
-    'relief',
-    'camp',
-    'safety',
-    'safe zone',
-    'emergency services',
-    'hospital',
-    'lumikas',
-    'paglikas',
-    'evac center',
-    'evacuation center',
-    'evacuation camp',
-    'evacuation site',
-    'relief goods',
-    'relief operations',
-    'relief center',
-    'relief camp',
-    'evacuation area',
-    'evacuation',
-    'evac',
-    'evacuacion',
-    'albergue',
-    'centro de evacuacion',
-    'centro de refugio',
-    'clinica',
-    'balay tabang',
-    'balay kaluwasan',
-    'kaluwasan',
+    'evacuation', 'evacuate', 'evacuated', 'shelter', 'relief',
+    'camp', 'safety', 'safe zone', 'emergency services', 'hospital',
+    'lumikas', 'paglikas',
+    'evac center', 'evacuation center', 'evacuation camp',
+    'evacuation site', 'relief goods', 'relief operations',
+    'relief center', 'relief camp', 'evacuation area', 'evac',
+    'evacuacion', 'albergue', 'centro de evacuacion',
+    'centro de refugio', 'clinica',
+    'balay tabang', 'balay kaluwasan', 'kaluwasan',
     // Tausug
-    'pagluwas',
-    'lumaas',
-    'sentro',
-    'higad',
-    'lugar kaluwasan',
-    'tabang lugal'
+    'pagluwas', 'lumaas', 'sentro', 'higad',
+    'lugar kaluwasan', 'tabang lugal'
   ];
   const generalKeywords = [
     'weather',
@@ -1252,31 +1183,35 @@ function classifyTweet(text) {
   
   let scores = {
     rescue: 0,
+    strongRescue: 0,
     damage: 0,
     safety: 0,
     general: 0
   };
-  
-  rescueKeywords.forEach(keyword => {
+
+  strongRescueKeywords.forEach(keyword => {
+    if (lowerText.includes(keyword)) { scores.rescue += 25; scores.strongRescue += 25; }
+  });
+  weakRescueKeywords.forEach(keyword => {
     if (lowerText.includes(keyword)) scores.rescue += 25;
   });
-  
+
   damageKeywords.forEach(keyword => {
     if (lowerText.includes(keyword)) scores.damage += 25;
   });
-  
+
   safetyKeywords.forEach(keyword => {
     if (lowerText.includes(keyword)) scores.safety += 25;
   });
-  
+
   generalKeywords.forEach(keyword => {
     if (lowerText.includes(keyword)) scores.general += 15;
   });
-  
-  const maxScore = Math.max(...Object.values(scores));
+
+  const maxScore = Math.max(scores.rescue, scores.damage, scores.safety, scores.general);
   const baseConfidence = 70 + (maxScore / 100) * 20;
   const confidence = Math.min(baseConfidence, 95);
-  
+
   let category = 'General Information';
   let categoryEmoji = '⚪';
   let categoryBadgeClass = 'badge-gray';
@@ -1284,8 +1219,10 @@ function classifyTweet(text) {
   let bannerMessage = 'This is general information that may be useful for reference.';
   let bannerClass = 'banner-gray';
   let description = 'Non-urgent news and updates.';
-  
-  if (scores.rescue >= scores.damage && scores.rescue >= scores.safety && scores.rescue >= scores.general && scores.rescue > 0) {
+
+  // Use strong rescue to override; weak rescue alone loses to damage
+  const effectiveRescue = scores.strongRescue > 0 ? scores.rescue : scores.rescue - scores.damage;
+  if (effectiveRescue > 0 && scores.strongRescue >= scores.damage && scores.rescue >= scores.safety && scores.rescue >= scores.general) {
     category = 'Rescue Request';
     categoryEmoji = '🔴';
     categoryBadgeClass = 'badge-red';
