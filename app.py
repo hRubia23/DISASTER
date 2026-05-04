@@ -68,6 +68,14 @@ def keyword_subcategory(text: str) -> str:
         "atrapa",
         "naatrapa",
         "naatrapado",
+        # Tausug
+        "pagtabang",
+        "nalubog",
+        "napit",
+        "nasakitan",
+        "matay",
+        "lungsuran",
+        "tawhid tabang",
     ]
     damage_keywords = [
         "damage",
@@ -93,6 +101,13 @@ def keyword_subcategory(text: str) -> str:
         "calle",
         "puente",
         "edificio",
+        # Tausug
+        "natumba",
+        "nalaglag",
+        "bangag",
+        "lupak",
+        "nasugad",
+        "nauba",
     ]
     safety_keywords = [
         "evacuation",
@@ -126,6 +141,13 @@ def keyword_subcategory(text: str) -> str:
         "balay tabang",
         "balay kaluwasan",
         "kaluwasan",
+        # Tausug
+        "pagluwas",
+        "lumaas",
+        "sentro",
+        "higad",
+        "lugar kaluwasan",
+        "tabang lugal",
     ]
 
     rescue = sum(1 for k in rescue_keywords if k in lower_text)

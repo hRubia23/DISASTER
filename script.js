@@ -1153,7 +1153,15 @@ function classifyTweet(text) {
     'ayuda',
     'atrapa',
     'naatrapa',
-    'naatrapado'
+    'naatrapado',
+    // Tausug
+    'pagtabang',
+    'nalubog',
+    'napit',
+    'nasakitan',
+    'matay',
+    'lungsuran',
+    'tawhid tabang'
   ];
   const damageKeywords = [
     'damage',
@@ -1178,7 +1186,14 @@ function classifyTweet(text) {
     'daot',
     'calle',
     'puente',
-    'edificio'
+    'edificio',
+    // Tausug
+    'natumba',
+    'nalaglag',
+    'bangag',
+    'lupak',
+    'nasugad',
+    'nauba'
   ];
   const safetyKeywords = [
     'evacuation',
@@ -1211,7 +1226,14 @@ function classifyTweet(text) {
     'clinica',
     'balay tabang',
     'balay kaluwasan',
-    'kaluwasan'
+    'kaluwasan',
+    // Tausug
+    'pagluwas',
+    'lumaas',
+    'sentro',
+    'higad',
+    'lugar kaluwasan',
+    'tabang lugal'
   ];
   const generalKeywords = [
     'weather',
