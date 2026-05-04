@@ -786,7 +786,7 @@ async function initPostView() {
     replyInput?.focus();
   }
 
-  if (!tweetParam && idParam && window.location.protocol !== 'file:') {
+  if (idParam && window.location.protocol !== 'file:') {
     try {
       const response = await fetch(`/api/classifications/${encodeURIComponent(idParam)}`, {
         credentials: 'include'
