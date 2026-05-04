@@ -1014,18 +1014,33 @@ async function classifyTweetWithServer(text) {
 }
 
 async function handleClassifyAction() {
+  const activeBtn = classifyBtn || classifyBatchBtn;
+  const originalLabel = activeBtn ? activeBtn.textContent : '';
+  if (activeBtn) { activeBtn.disabled = true; activeBtn.textContent = 'Classifying…'; }
+
   const isBatchMode = batchView && !batchView.classList.contains('hidden');
   const batchTweets = JSON.parse(localStorage.getItem('batchTweets') || '[]')
     .map((line) => String(line).trim())
     .filter((line) => line.length > 0);
 
-  const showClassifyError = (msg) => {
-    const resultSection = document.getElementById('resultSection');
-    if (resultSection) {
-      resultSection.innerHTML = `<div class="error-banner" style="color:#d32f2f;background:#fdecea;border-radius:8px;padding:12px 16px;margin-top:12px;">Classification failed: ${msg}. Please check your connection and try again.</div>`;
-      resultSection.classList.remove('hidden');
+  const showClassifyStatus = (msg, isError) => {
+    console[isError ? 'error' : 'log']('[Classify]', msg);
+    const statusEl = document.getElementById('classifyStatus');
+    if (statusEl) {
+      statusEl.textContent = msg;
+      statusEl.style.display = 'block';
+      statusEl.style.background = isError ? '#fdecea' : '#e8f5e9';
+      statusEl.style.color = isError ? '#d32f2f' : '#2e7d32';
+      if (!isError) setTimeout(() => { statusEl.style.display = 'none'; }, 3000);
+    } else {
+      const resultSection = document.getElementById('resultSection');
+      if (resultSection) {
+        resultSection.innerHTML = `<div style="color:${isError ? '#d32f2f' : '#2e7d32'};background:${isError ? '#fdecea' : '#e8f5e9'};border-radius:8px;padding:12px 16px;margin-top:12px;">${msg}</div>`;
+        resultSection.classList.remove('hidden');
+      }
     }
   };
+  const showClassifyError = (msg) => showClassifyStatus(`Classification failed: ${msg}. Please check your connection and try again.`, true);
 
   if (isBatchMode && batchTweets.length > 0) {
     try {
@@ -1066,6 +1081,7 @@ async function handleClassifyAction() {
       }
     } catch (error) {
       showClassifyError(error.message);
+      if (activeBtn) { activeBtn.disabled = false; activeBtn.textContent = originalLabel; }
       return;
     }
   }
@@ -1087,8 +1103,11 @@ async function handleClassifyAction() {
     }
     prependFeedItems([record]);
     notifyDashboardRefresh();
+    showClassifyStatus('Tweet classified successfully!', false);
   } catch (error) {
     showClassifyError(error.message);
+  } finally {
+    if (activeBtn) { activeBtn.disabled = false; activeBtn.textContent = originalLabel; }
   }
 }
 
