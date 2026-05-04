@@ -254,11 +254,9 @@ function buildFeedItem(record) {
     }
     viewLink.textContent = 'View details';
 
-    actions.appendChild(confidence);
-    actions.appendChild(viewLink);
-
-    // Admin also gets Reply and Like
-    actions.classList.add('feed-action-bar');
+    // Left group: Reply + Like
+    const leftGroup = document.createElement('div');
+    leftGroup.className = 'feed-action-bar';
     const likeCount = Number(record.like_count || 0);
     const replyCount = Number(record.reply_count || 0);
     const likeBtn = buildFeedActionButton('Like', likeCount, Boolean(record.liked_by_me));
@@ -274,8 +272,17 @@ function buildFeedItem(record) {
       handleReplyAction(record, replyBtn);
     });
 
-    actions.appendChild(replyBtn);
-    actions.appendChild(likeBtn);
+    leftGroup.appendChild(replyBtn);
+    leftGroup.appendChild(likeBtn);
+
+    // Right group: Confidence + View details
+    const rightGroup = document.createElement('div');
+    rightGroup.className = 'feed-action-bar';
+    rightGroup.appendChild(confidence);
+    rightGroup.appendChild(viewLink);
+
+    actions.appendChild(leftGroup);
+    actions.appendChild(rightGroup);
   }
 
   if (!isAdmin) {

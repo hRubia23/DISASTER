@@ -604,15 +604,12 @@ def toggle_like(classification_id: int):
     if "user_id" not in session:
         return jsonify({"message": "Authentication required."}), 401
 
-    if session.get("role") == "admin":
-        return jsonify({"message": "Admins cannot like posts."}), 403
-
     conn = get_connection()
-    owned = conn.execute(
-        "SELECT 1 FROM classifications WHERE id = ? AND user_id = ?",
-        (classification_id, session.get("user_id")),
+    exists = conn.execute(
+        "SELECT 1 FROM classifications WHERE id = ?",
+        (classification_id,),
     ).fetchone()
-    if not owned:
+    if not exists:
         conn.close()
         return jsonify({"message": "Classification not found."}), 404
 
