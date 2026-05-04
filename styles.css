@@ -46,7 +46,7 @@ a {
 .page-wrap {
   max-width: 1260px;
   margin: 0 auto;
-  padding: 26px 18px 40px;
+  padding: 16px 18px 28px;
 }
 
 .app-shell {
@@ -120,7 +120,7 @@ a {
 
 .main-feed {
   display: grid;
-  gap: 18px;
+  gap: 12px;
 }
 
 .side-panel {
@@ -133,7 +133,7 @@ a {
   border: 1px solid var(--border);
   border-radius: 22px;
   box-shadow: var(--shadow);
-  padding: 22px;
+  padding: 16px 20px;
 }
 
 .detail-card {
@@ -194,7 +194,7 @@ a {
 
 .feed-stream {
   display: grid;
-  gap: 16px;
+  gap: 10px;
 }
 
 .feed-stream-head {
@@ -493,20 +493,20 @@ a {
   display: flex;
   align-items: flex-start;
   justify-content: space-between;
-  gap: 18px;
+  gap: 10px;
   flex-wrap: wrap;
 }
 
 .feed-header h2 {
   margin: 0;
   font-family: 'Space Grotesk', sans-serif;
-  font-size: clamp(1.5rem, 3vw, 2.4rem);
+  font-size: clamp(1.2rem, 2.5vw, 1.8rem);
   color: var(--ink);
 }
 
 .composer {
-  margin-top: 18px;
-  padding-top: 16px;
+  margin-top: 10px;
+  padding-top: 12px;
   border-top: 1px solid #e8edf3;
 }
 
@@ -724,18 +724,19 @@ a {
 
 .subtle {
   color: var(--text-soft);
-  margin-top: 6px;
-  line-height: 1.55;
+  margin-top: 4px;
+  margin-bottom: 0;
+  line-height: 1.5;
 }
 
 .input-area {
   width: 100%;
-  min-height: 140px;
-  margin: 14px 0;
+  min-height: 100px;
+  margin: 10px 0;
   border-radius: 14px;
   border: 1px solid #d9e1ea;
   background: #fcfeff;
-  padding: 14px;
+  padding: 12px 14px;
   font-family: inherit;
   font-size: 0.97rem;
   resize: vertical;
