@@ -4,6 +4,7 @@ import csv
 import io
 import os
 import sqlite3
+import sys
 from datetime import datetime, timezone
 from pathlib import Path
 
@@ -14,6 +15,10 @@ import joblib
 from werkzeug.security import check_password_hash, generate_password_hash
 
 BASE_DIR = Path(__file__).resolve().parent
+# Make scripts/ importable so joblib can unpickle TextPreprocessor
+sys.path.insert(0, str(BASE_DIR))
+from scripts.preprocessors import TextPreprocessor, FeatureEngineer, passthrough_text  # noqa: F401
+
 DB_PATH = BASE_DIR / "users.db"
 MODEL_PATH = BASE_DIR / "models" / "model.joblib"
 
@@ -378,6 +383,25 @@ def login():
     )
 
 
+_LABEL_MAP = {
+    "rescue_volunteering_or_donation_effort": "Rescue Request",
+    "requests_or_urgent_needs": "Rescue Request",
+    "injured_or_dead_people": "Rescue Request",
+    "missing_or_found_people": "Rescue Request",
+    "infrastructure_and_utility_damage": "Damage Report",
+    "displaced_people_and_evacuations": "Safety Update",
+    "caution_and_advice": "Safety Update",
+    "sympathy_and_support": "General Information",
+    "other_relevant_information": "General Information",
+    "not_humanitarian": "General Information",
+    # already-mapped labels (heuristic path)
+    "Rescue Request": "Rescue Request",
+    "Damage Report": "Damage Report",
+    "Safety Update": "Safety Update",
+    "General Information": "General Information",
+}
+
+
 def classify_text(text: str):
     model = get_model()
     model_used = "heuristic"
@@ -391,11 +415,11 @@ def classify_text(text: str):
         proba = model.predict_proba([text])[0]
         best_idx = int(proba.argmax())
         confidence = float(proba[best_idx])
-        category = str(model.classes_[best_idx])
+        raw_category = str(model.classes_[best_idx])
     except Exception:
-        pred = model.predict([text])[0]
-        category = str(pred)
+        raw_category = str(model.predict([text])[0])
         confidence = 0.85
+    category = _LABEL_MAP.get(raw_category, "General Information")
     return category, confidence, model_used
 
 
