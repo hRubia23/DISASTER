@@ -1,70 +1,61 @@
 from __future__ import annotations
 
-import re
 from pathlib import Path
 
-import joblib
-import nltk
 import numpy as np
 import pandas as pd
-from nltk.corpus import stopwords
-from nltk.sentiment import SentimentIntensityAnalyzer
-from nltk.stem import PorterStemmer
-from sklearn.base import BaseEstimator, TransformerMixin
-from sklearn.calibration import CalibratedClassifierCV
-from sklearn.feature_extraction.text import TfidfVectorizer
-from sklearn.linear_model import LogisticRegression
+import torch
 from sklearn.metrics import accuracy_score, f1_score, precision_score, recall_score
 from sklearn.model_selection import train_test_split
-from sklearn.naive_bayes import MultinomialNB
-from sklearn.pipeline import FeatureUnion, Pipeline
-from sklearn.svm import LinearSVC
-
-from scripts.preprocessors import TextPreprocessor, FeatureEngineer, passthrough_text  # noqa: F401
+from torch.optim import AdamW
+from torch.utils.data import DataLoader, Dataset
+from transformers import (
+    DistilBertForSequenceClassification,
+    DistilBertTokenizerFast,
+    get_linear_schedule_with_warmup,
+)
 
 BASE_DIR = Path(__file__).resolve().parents[1]
 DATASET_PATH = BASE_DIR / "datasets" / "disaster_tweets.csv"
-MODEL_DIR = BASE_DIR / "models"
-MODEL_PATH = MODEL_DIR / "model.joblib"
+MODEL_DIR = BASE_DIR / "models" / "distilbert_model"
 OUTPUT_DIR = BASE_DIR / "outputs" / "charts"
 
+# Map original fine-grained labels -> 4 categories
+LABEL_MAP = {
+    "rescue_volunteering_or_donation_effort": "Rescue Request",
+    "requests_or_urgent_needs": "Rescue Request",
+    "injured_or_dead_people": "Rescue Request",
+    "missing_or_found_people": "Rescue Request",
+    "infrastructure_and_utility_damage": "Damage Report",
+    "displaced_people_and_evacuations": "Safety Update",
+    "caution_and_advice": "Safety Update",
+    "sympathy_and_support": "General Information",
+    "other_relevant_information": "General Information",
+    "not_humanitarian": "General Information",
+}
 
-def ensure_nltk() -> None:
-    nltk.download("punkt", quiet=True)
-    nltk.download("punkt_tab", quiet=True)
-    nltk.download("stopwords", quiet=True)
-    nltk.download("vader_lexicon", quiet=True)
+CATEGORIES = ["General Information", "Rescue Request", "Damage Report", "Safety Update"]
+LABEL2ID = {label: i for i, label in enumerate(CATEGORIES)}
+ID2LABEL = {i: label for i, label in enumerate(CATEGORIES)}
 
 
-def build_pipeline(model, include_extra: bool = True):
-    feature_steps = [
-        (
-            "tfidf",
-            TfidfVectorizer(
-                tokenizer=str.split,
-                preprocessor=passthrough_text,
-                lowercase=False,
-                ngram_range=(1, 2),
-                max_features=10_000,
-            ),
-        )
-    ]
-    if include_extra:
-        feature_steps.append(("extra", FeatureEngineer()))
+class TweetDataset(Dataset):
+    def __init__(self, encodings, labels):
+        self.encodings = encodings
+        self.labels = labels
 
-    return Pipeline(
-        steps=[
-            ("prep", TextPreprocessor()),
-            ("features", FeatureUnion(feature_steps)),
-            ("clf", model),
-        ]
-    )
+    def __getitem__(self, idx):
+        item = {key: torch.tensor(val[idx]) for key, val in self.encodings.items()}
+        item["labels"] = torch.tensor(self.labels[idx])
+        return item
+
+    def __len__(self):
+        return len(self.labels)
 
 
 def main() -> int:
     MODEL_DIR.mkdir(parents=True, exist_ok=True)
     OUTPUT_DIR.mkdir(parents=True, exist_ok=True)
-    ensure_nltk()
 
     if not DATASET_PATH.exists():
         print(f"[train_model] Missing dataset: {DATASET_PATH}")
@@ -72,65 +63,113 @@ def main() -> int:
         return 2
 
     df = pd.read_csv(DATASET_PATH)
-    text_col = None
-    for candidate in ("text", "tweet_text"):
-        if candidate in df.columns:
-            text_col = candidate
-            break
-    if not text_col:
-        raise SystemExit("Dataset must contain column: text or tweet_text")
+    df.columns = df.columns.str.strip()
 
-    label_col = None
-    for candidate in ("label", "category", "class_label"):
-        if candidate in df.columns:
-            label_col = candidate
-            break
-    if not label_col:
-        raise SystemExit("Dataset must contain column: label, category, or class_label")
-
-    X = df[text_col].astype(str).fillna("")
-    y = df[label_col].astype(str).fillna("")
+    texts = df["tweet_text"].astype(str).fillna("").tolist()
+    raw_labels = df["class_label"].astype(str).fillna("").str.strip().tolist()
+    mapped_labels = [LABEL_MAP.get(lbl, "General Information") for lbl in raw_labels]
+    label_ids = [LABEL2ID[lbl] for lbl in mapped_labels]
 
     X_train, X_test, y_train, y_test = train_test_split(
-        X, y, test_size=0.2, random_state=42, stratify=y if y.nunique() > 1 else None
+        texts, label_ids, test_size=0.2, random_state=42, stratify=label_ids
     )
+    print(f"[train_model] Train: {len(X_train)}, Test: {len(X_test)}")
 
-    models = {
-        "log_reg": (LogisticRegression(max_iter=1500, n_jobs=None), True),
-    }
+    tokenizer = DistilBertTokenizerFast.from_pretrained("distilbert-base-uncased")
+    train_enc = tokenizer(X_train, truncation=True, padding=True, max_length=128)
+    test_enc = tokenizer(X_test, truncation=True, padding=True, max_length=128)
 
-    results = []
-    best_model = None
-    best_score = -1.0
+    train_dataset = TweetDataset(train_enc, y_train)
+    test_dataset = TweetDataset(test_enc, y_test)
 
-    for name, (model, include_extra) in models.items():
-        pipeline = build_pipeline(model, include_extra=include_extra)
-        pipeline.fit(X_train, y_train)
+    train_loader = DataLoader(train_dataset, batch_size=16, shuffle=True)
+    test_loader = DataLoader(test_dataset, batch_size=32)
 
-        preds = pipeline.predict(X_test)
-        metrics = {
-            "model": name,
-            "f1_macro": f1_score(y_test, preds, average="macro"),
-            "precision_macro": precision_score(y_test, preds, average="macro"),
-            "recall_macro": recall_score(y_test, preds, average="macro"),
-            "accuracy": accuracy_score(y_test, preds),
-        }
-        results.append(metrics)
+    device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
+    print(f"[train_model] Using device: {device}")
 
-        if metrics["f1_macro"] > best_score:
-            best_score = metrics["f1_macro"]
-            best_model = pipeline
+    model = DistilBertForSequenceClassification.from_pretrained(
+        "distilbert-base-uncased",
+        num_labels=len(CATEGORIES),
+        id2label=ID2LABEL,
+        label2id=LABEL2ID,
+    )
+    model.to(device)
 
-    if best_model is None:
-        raise SystemExit("[train_model] No model trained.")
+    num_epochs = 5
+    optimizer = AdamW(model.parameters(), lr=2e-5, weight_decay=0.01)
+    total_steps = len(train_loader) * num_epochs
+    scheduler = get_linear_schedule_with_warmup(optimizer, num_warmup_steps=0, num_training_steps=total_steps)
 
-    results_df = pd.DataFrame(results).sort_values("f1_macro", ascending=False)
-    results_path = OUTPUT_DIR / "model_comparison.csv"
-    results_df.to_csv(results_path, index=False)
+    best_f1 = -1.0
+    best_state = None
 
-    joblib.dump(best_model, MODEL_PATH)
-    print(f"[train_model] Saved model to: {MODEL_PATH}")
-    print(f"[train_model] Saved comparison to: {results_path}")
+    for epoch in range(num_epochs):
+        model.train()
+        total_loss = 0.0
+        for batch in train_loader:
+            optimizer.zero_grad()
+            input_ids = batch["input_ids"].to(device)
+            attention_mask = batch["attention_mask"].to(device)
+            labels = batch["labels"].to(device)
+            outputs = model(input_ids=input_ids, attention_mask=attention_mask, labels=labels)
+            loss = outputs.loss
+            loss.backward()
+            torch.nn.utils.clip_grad_norm_(model.parameters(), 1.0)
+            optimizer.step()
+            scheduler.step()
+            total_loss += loss.item()
+
+        avg_loss = total_loss / len(train_loader)
+
+        # Evaluate
+        model.eval()
+        all_preds, all_labels = [], []
+        with torch.no_grad():
+            for batch in test_loader:
+                input_ids = batch["input_ids"].to(device)
+                attention_mask = batch["attention_mask"].to(device)
+                labels = batch["labels"].to(device)
+                outputs = model(input_ids=input_ids, attention_mask=attention_mask)
+                preds = torch.argmax(outputs.logits, dim=-1)
+                all_preds.extend(preds.cpu().numpy())
+                all_labels.extend(labels.cpu().numpy())
+
+        f1 = f1_score(all_labels, all_preds, average="macro", zero_division=0)
+        acc = accuracy_score(all_labels, all_preds)
+        print(f"[Epoch {epoch+1}/{num_epochs}] loss={avg_loss:.4f} | f1_macro={f1:.4f} | acc={acc:.4f}")
+
+        if f1 > best_f1:
+            best_f1 = f1
+            best_state = {k: v.clone() for k, v in model.state_dict().items()}
+
+    # Load best weights and save
+    model.load_state_dict(best_state)
+    model.save_pretrained(str(MODEL_DIR))
+    tokenizer.save_pretrained(str(MODEL_DIR))
+    print(f"[train_model] Saved DistilBERT model to: {MODEL_DIR}")
+
+    # Final eval metrics
+    model.eval()
+    all_preds, all_labels = [], []
+    with torch.no_grad():
+        for batch in test_loader:
+            input_ids = batch["input_ids"].to(device)
+            attention_mask = batch["attention_mask"].to(device)
+            labels = batch["labels"].to(device)
+            outputs = model(input_ids=input_ids, attention_mask=attention_mask)
+            preds = torch.argmax(outputs.logits, dim=-1)
+            all_preds.extend(preds.cpu().numpy())
+            all_labels.extend(labels.cpu().numpy())
+
+    pd.DataFrame([{
+        "model": "distilbert-base-uncased",
+        "accuracy": accuracy_score(all_labels, all_preds),
+        "f1_macro": f1_score(all_labels, all_preds, average="macro", zero_division=0),
+        "precision_macro": precision_score(all_labels, all_preds, average="macro", zero_division=0),
+        "recall_macro": recall_score(all_labels, all_preds, average="macro", zero_division=0),
+    }]).to_csv(OUTPUT_DIR / "model_comparison.csv", index=False)
+
     return 0
 
 

@@ -1,7 +1,0 @@
-Flask==3.0.3
-pandas
-scikit-learn
-matplotlib
-joblib
-reportlab
-nltk

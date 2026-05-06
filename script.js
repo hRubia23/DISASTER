@@ -163,7 +163,6 @@ function setMode(mode) {
       batchModeBtn.classList.remove('btn-secondary');
       batchModeBtn.classList.add('btn-primary');
     }
-    batchView.scrollIntoView({ behavior: 'smooth', block: 'center' });
   } else {
     batchView.classList.add('hidden');
     singleView.classList.remove('hidden');
@@ -642,7 +641,6 @@ function prependFeedItems(records) {
     const node = buildFeedItem(record);
     liveFeed.prepend(node);
   });
-  liveFeed.scrollIntoView({ behavior: 'smooth', block: 'start' });
 }
 
 async function loadLiveFeed() {
@@ -1711,6 +1709,37 @@ if (document.getElementById('historyList')) {
 }
 
 const clearAllBtn = document.getElementById('clearAllBtn');
+const deleteRecentBtn = document.getElementById('deleteRecentBtn');
+if (deleteRecentBtn) {
+  deleteRecentBtn.addEventListener('click', async () => {
+    if (!confirm('Delete the most recent classification?')) {
+      return;
+    }
+    if (window.location.protocol === 'file:') {
+      const existing = readLocalClassifications();
+      if (existing.length === 0) {
+        alert('No classifications to delete yet.');
+        return;
+      }
+      existing.shift();
+      writeLocalClassifications(existing);
+      notifyDashboardRefresh();
+      loadDashboard();
+      return;
+    }
+    const scopeParam = currentUserRole === 'admin' ? 'all' : 'mine';
+    const response = await fetch(`/api/history/delete-latest?scope=${scopeParam}`, {
+      method: 'POST',
+      credentials: 'include'
+    });
+    if (!response.ok) {
+      alert('No classifications to delete yet.');
+      return;
+    }
+    notifyDashboardRefresh();
+    loadDashboard();
+  });
+}
 if (clearAllBtn) {
   clearAllBtn.addEventListener('click', async () => {
     if (!confirm('Are you sure you want to clear all classifications? This cannot be undone.')) {

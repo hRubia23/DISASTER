@@ -4,23 +4,19 @@ import csv
 import io
 import os
 import sqlite3
-import sys
 from datetime import datetime, timezone
 from pathlib import Path
 
 from flask import Flask, jsonify, request, session, send_from_directory
 from reportlab.lib.pagesizes import letter
 from reportlab.pdfgen import canvas
-import joblib
+from transformers import pipeline as hf_pipeline
 from werkzeug.security import check_password_hash, generate_password_hash
 
 BASE_DIR = Path(__file__).resolve().parent
-# Make scripts/ importable so joblib can unpickle TextPreprocessor
-sys.path.insert(0, str(BASE_DIR))
-from scripts.preprocessors import TextPreprocessor, FeatureEngineer, passthrough_text  # noqa: F401
 
 DB_PATH = BASE_DIR / "users.db"
-MODEL_PATH = BASE_DIR / "models" / "model.joblib"
+MODEL_DIR = BASE_DIR / "models" / "distilbert_model"
 
 app = Flask(__name__, static_folder=str(BASE_DIR), static_url_path="")
 app.config["SECRET_KEY"] = os.environ.get("FLASK_SECRET_KEY", "change-this-secret-in-production")
@@ -32,9 +28,22 @@ def get_model():
     global _MODEL
     if _MODEL is not None:
         return _MODEL
-    if not MODEL_PATH.exists():
+    if not MODEL_DIR.exists():
         return None
-    _MODEL = joblib.load(MODEL_PATH)
+    config_path = MODEL_DIR / "config.json"
+    if not config_path.exists():
+        app.logger.warning("DistilBERT config missing at %s", config_path)
+        return None
+    try:
+        _MODEL = hf_pipeline(
+            "text-classification",
+            model=str(MODEL_DIR),
+            tokenizer=str(MODEL_DIR),
+            device=-1,  # CPU
+        )
+    except Exception:
+        app.logger.exception("Failed to load DistilBERT model from %s", MODEL_DIR)
+        return None
     return _MODEL
 
 
@@ -345,26 +354,6 @@ def login():
         }
     )
 
-
-_LABEL_MAP = {
-    "rescue_volunteering_or_donation_effort": "Rescue Request",
-    "requests_or_urgent_needs": "Rescue Request",
-    "injured_or_dead_people": "Rescue Request",
-    "missing_or_found_people": "Rescue Request",
-    "infrastructure_and_utility_damage": "Damage Report",
-    "displaced_people_and_evacuations": "Safety Update",
-    "caution_and_advice": "Safety Update",
-    "sympathy_and_support": "General Information",
-    "other_relevant_information": "General Information",
-    "not_humanitarian": "General Information",
-    # already-mapped labels (heuristic path)
-    "Rescue Request": "Rescue Request",
-    "Damage Report": "Damage Report",
-    "Safety Update": "Safety Update",
-    "General Information": "General Information",
-}
-
-
 def classify_text(text: str):
     model = get_model()
     model_used = "heuristic"
@@ -373,26 +362,15 @@ def classify_text(text: str):
         confidence = 0.72
         return category, confidence, model_used
 
-    model_used = "ml"
+    model_used = "distilbert"
     try:
-        proba = model.predict_proba([text])[0]
-        best_idx = int(proba.argmax())
-        confidence = float(proba[best_idx])
-        raw_category = str(model.classes_[best_idx])
+        result = model(text, truncation=True, max_length=128)[0]
+        category = result["label"]
+        confidence = float(result["score"])
     except Exception:
-        raw_category = str(model.predict([text])[0])
-        confidence = 0.85
-    category = _LABEL_MAP.get(raw_category, "General Information")
-
-    # Keyword post-processing override:
-    # - If keywords detect a specific category, use that (handles dialects & damage vs rescue)
-    # - If NO keywords match at all, default to General Information (don't trust ML alone
-    #   for vague phrases like "how is everybody?" or "be careful everyone")
-    keyword_category = keyword_subcategory(text)
-    if keyword_category != "General Information":
-        category = keyword_category
-    else:
-        category = "General Information"
+        category = keyword_subcategory(text)
+        confidence = 0.72
+        model_used = "heuristic"
 
     return category, confidence, model_used
 
@@ -845,6 +823,39 @@ def clear_history():
     conn.commit()
     conn.close()
     return jsonify({"message": "History cleared."})
+
+
+@app.post("/api/history/delete-latest")
+def delete_latest_history():
+    if "user_id" not in session:
+        return jsonify({"message": "Authentication required."}), 401
+
+    scope = request.args.get("scope", "mine")
+    conn = get_connection()
+
+    if scope == "all" and session.get("role") == "admin":
+        row = conn.execute("SELECT id FROM classifications ORDER BY id DESC LIMIT 1").fetchone()
+    else:
+        user_id = session.get("user_id")
+        row = conn.execute(
+            "SELECT id FROM classifications WHERE user_id = ? ORDER BY id DESC LIMIT 1",
+            (user_id,),
+        ).fetchone()
+
+    if not row:
+        conn.close()
+        return jsonify({"message": "No classifications to delete."}), 404
+
+    classification_id = int(row["id"])
+    conn.execute("DELETE FROM replies WHERE classification_id = ?", (classification_id,))
+    conn.execute("DELETE FROM likes WHERE classification_id = ?", (classification_id,))
+    conn.execute("DELETE FROM reposts WHERE classification_id = ?", (classification_id,))
+    conn.execute("DELETE FROM flags WHERE classification_id = ?", (classification_id,))
+    conn.execute("DELETE FROM classifications WHERE id = ?", (classification_id,))
+
+    conn.commit()
+    conn.close()
+    return jsonify({"message": "Latest classification deleted.", "classification_id": classification_id})
 
 
 @app.get("/api/export/csv")
