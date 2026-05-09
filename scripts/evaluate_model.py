@@ -1,43 +1,33 @@
 from __future__ import annotations
 
 from pathlib import Path
-import importlib.util
-import sys
-
-import joblib
+import torch
+import numpy as np
 import matplotlib.pyplot as plt
 import pandas as pd
 from sklearn.metrics import ConfusionMatrixDisplay, classification_report, confusion_matrix
 from sklearn.model_selection import train_test_split
+from transformers import AutoModelForSequenceClassification, AutoTokenizer, pipeline
 
 BASE_DIR = Path(__file__).resolve().parents[1]
 DATASET_PATH = BASE_DIR / "datasets" / "disaster_tweets.csv"
-MODEL_PATH = BASE_DIR / "models" / "model.joblib"
+MODEL_DIR = BASE_DIR / "models" / "distilbert_model"
 OUTPUT_DIR = BASE_DIR / "outputs" / "charts"
 
-
-def ensure_model_classes_loaded() -> None:
-    model_path = BASE_DIR / "scripts" / "train_model.py"
-    if not model_path.exists():
-        return
-    spec = importlib.util.spec_from_file_location("train_model", model_path)
-    if spec is None or spec.loader is None:
-        return
-    module = importlib.util.module_from_spec(spec)
-    spec.loader.exec_module(module)
-    main_mod = sys.modules.get("__main__")
-    if not main_mod:
-        return
-    for attr in ("TextPreprocessor", "FeatureEngineer", "passthrough_text"):
-        if hasattr(module, attr):
-            setattr(main_mod, attr, getattr(module, attr))
+# Class labels mapping
+CLASS_LABELS = {
+    0: "General Information",
+    1: "Rescue Request",
+    2: "Damage Report",
+    3: "Safety Update"
+}
 
 
 def main() -> int:
     OUTPUT_DIR.mkdir(parents=True, exist_ok=True)
 
-    if not MODEL_PATH.exists():
-        print(f"[evaluate_model] Missing model: {MODEL_PATH}")
+    if not MODEL_DIR.exists():
+        print(f"[evaluate_model] Missing model: {MODEL_DIR}")
         print("[evaluate_model] Run: py scripts\\train_model.py")
         return 2
 
@@ -70,10 +60,24 @@ def main() -> int:
         X, y, test_size=0.2, random_state=42, stratify=y if y.nunique() > 1 else None
     )
 
-    ensure_model_classes_loaded()
-    model = joblib.load(MODEL_PATH)
-    y_pred = model.predict(X_test)
-
+    # Load model and tokenizer
+    device = 0 if torch.cuda.is_available() else -1
+    model = AutoModelForSequenceClassification.from_pretrained(str(MODEL_DIR))
+    tokenizer = AutoTokenizer.from_pretrained(str(MODEL_DIR))
+    
+    # Create pipeline for inference
+    classifier = pipeline("text-classification", model=model, tokenizer=tokenizer, device=device)
+    
+    # Predict on test set
+    y_pred_labels = []
+    for text in X_test:
+        result = classifier(text, truncation=True, max_length=512)
+        # Pipeline returns the actual class label name
+        pred_label = result[0]["label"]
+        y_pred_labels.append(pred_label)
+    
+    y_pred = np.array(y_pred_labels)
+    
     report = classification_report(y_test, y_pred, digits=4)
     report_path = OUTPUT_DIR / "classification_report.txt"
     report_path.write_text(report, encoding="utf-8")
@@ -81,9 +85,9 @@ def main() -> int:
     labels = sorted(y.unique())
     cm = confusion_matrix(y_test, y_pred, labels=labels)
     disp = ConfusionMatrixDisplay(confusion_matrix=cm, display_labels=labels)
-    fig, ax = plt.subplots(figsize=(7, 6))
+    fig, ax = plt.subplots(figsize=(8, 7))
     disp.plot(ax=ax, cmap="Blues", values_format="d", colorbar=False)
-    ax.set_title("Confusion Matrix")
+    ax.set_title("Confusion Matrix - 4-Category Classification")
     plt.tight_layout()
     cm_path = OUTPUT_DIR / "confusion_matrix.png"
     plt.savefig(cm_path, dpi=160)

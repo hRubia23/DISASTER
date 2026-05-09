@@ -1,15 +1,19 @@
                                         precision    recall  f1-score   support
 
-                    caution_and_advice     0.0000    0.0000    0.0000         2
-      displaced_people_and_evacuations     0.0000    0.0000    0.0000         1
-     infrastructure_and_utility_damage     0.0000    0.0000    0.0000         7
-                injured_or_dead_people     0.7000    0.7778    0.7368         9
-                      not_humanitarian     0.0000    0.0000    0.0000         2
-            other_relevant_information     0.0000    0.0000    0.0000         8
-              requests_or_urgent_needs     0.0000    0.0000    0.0000         3
-rescue_volunteering_or_donation_effort     0.5735    1.0000    0.7290        39
-                  sympathy_and_support     0.0000    0.0000    0.0000        10
+                         Damage Report     0.0000    0.0000    0.0000       0.0
+                   General Information     0.0000    0.0000    0.0000       0.0
+                        Rescue Request     0.0000    0.0000    0.0000       0.0
+                         Safety Update     0.0000    0.0000    0.0000       0.0
+                    caution_and_advice     0.0000    0.0000    0.0000       2.0
+      displaced_people_and_evacuations     0.0000    0.0000    0.0000       1.0
+     infrastructure_and_utility_damage     0.0000    0.0000    0.0000       7.0
+                injured_or_dead_people     0.0000    0.0000    0.0000       9.0
+                      not_humanitarian     0.0000    0.0000    0.0000       2.0
+            other_relevant_information     0.0000    0.0000    0.0000       8.0
+              requests_or_urgent_needs     0.0000    0.0000    0.0000       3.0
+rescue_volunteering_or_donation_effort     0.0000    0.0000    0.0000      39.0
+                  sympathy_and_support     0.0000    0.0000    0.0000      10.0
 
-                              accuracy                         0.5679        81
-                             macro avg     0.1415    0.1975    0.1629        81
-                          weighted avg     0.3539    0.5679    0.4329        81
+                              accuracy                         0.0000      81.0
+                             macro avg     0.0000    0.0000    0.0000      81.0
+                          weighted avg     0.0000    0.0000    0.0000      81.0

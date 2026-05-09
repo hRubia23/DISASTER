@@ -158,7 +158,7 @@ def main() -> int:
 
     # Load best weights and save
     model.load_state_dict(best_state)
-    model.save_pretrained(str(MODEL_DIR))
+    model.save_pretrained(str(MODEL_DIR), save_safetensors=False)
     tokenizer.save_pretrained(str(MODEL_DIR))
     print(f"[train_model] Saved DistilBERT model to: {MODEL_DIR}")
 
