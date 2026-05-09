@@ -8,7 +8,7 @@ import torch
 from sklearn.metrics import accuracy_score, f1_score, precision_score, recall_score
 from sklearn.model_selection import train_test_split
 from torch.optim import AdamW
-from torch.utils.data import DataLoader, Dataset
+from torch.utils.data import DataLoader, Dataset, WeightedRandomSampler
 from transformers import (
     DistilBertForSequenceClassification,
     DistilBertTokenizerFast,
@@ -75,6 +75,13 @@ def main() -> int:
     )
     print(f"[train_model] Train: {len(X_train)}, Test: {len(X_test)}")
 
+    class_counts = np.bincount(y_train, minlength=len(CATEGORIES))
+    raw_weights = class_counts.sum() / (len(CATEGORIES) * np.clip(class_counts, 1, None))
+    class_weights = np.sqrt(raw_weights)
+    class_weights = np.clip(class_weights, 0.6, 3.0)
+    print(f"[train_model] Class counts: {class_counts.tolist()}")
+    print(f"[train_model] Class weights: {class_weights.round(3).tolist()}")
+
     tokenizer = DistilBertTokenizerFast.from_pretrained("distilbert-base-uncased")
     train_enc = tokenizer(X_train, truncation=True, padding=True, max_length=128)
     test_enc = tokenizer(X_test, truncation=True, padding=True, max_length=128)
@@ -82,7 +89,9 @@ def main() -> int:
     train_dataset = TweetDataset(train_enc, y_train)
     test_dataset = TweetDataset(test_enc, y_test)
 
-    train_loader = DataLoader(train_dataset, batch_size=16, shuffle=True)
+    sample_weights = [class_weights[label] for label in y_train]
+    sampler = WeightedRandomSampler(sample_weights, num_samples=len(sample_weights), replacement=True)
+    train_loader = DataLoader(train_dataset, batch_size=16, sampler=sampler)
     test_loader = DataLoader(test_dataset, batch_size=32)
 
     device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
@@ -95,6 +104,10 @@ def main() -> int:
         label2id=LABEL2ID,
     )
     model.to(device)
+
+    loss_fn = torch.nn.CrossEntropyLoss(
+        weight=torch.tensor(class_weights, dtype=torch.float, device=device)
+    )
 
     num_epochs = 5
     optimizer = AdamW(model.parameters(), lr=2e-5, weight_decay=0.01)
@@ -112,8 +125,8 @@ def main() -> int:
             input_ids = batch["input_ids"].to(device)
             attention_mask = batch["attention_mask"].to(device)
             labels = batch["labels"].to(device)
-            outputs = model(input_ids=input_ids, attention_mask=attention_mask, labels=labels)
-            loss = outputs.loss
+            outputs = model(input_ids=input_ids, attention_mask=attention_mask)
+            loss = loss_fn(outputs.logits, labels)
             loss.backward()
             torch.nn.utils.clip_grad_norm_(model.parameters(), 1.0)
             optimizer.step()

@@ -15,6 +15,7 @@ const topNavLinks = document.querySelector('.top-nav .nav-links');
 const logoutBtn = document.getElementById('logoutBtn');
 const userGreeting = document.getElementById('userGreeting');
 const liveFeed = document.getElementById('liveFeed');
+const historyFilters = document.getElementById('historyFilters');
 const feedSeenIds = new Set();
 let currentUserRole = 'viewer';
 let currentUserName = '';
@@ -22,6 +23,8 @@ let currentUserId = null;
 const LEGACY_STORAGE_KEY = 'classifications';
 const DASHBOARD_REFRESH_KEY = 'dashboard_refresh';
 const DASHBOARD_CHANNEL = 'dashboard_updates';
+let activeHistoryFilter = null;
+let historyItemsCache = [];
 
 async function getCurrentSessionUser() {
   if (window.location.protocol === 'file:') {
@@ -1495,6 +1498,50 @@ function buildHistoryItem(item) {
   return historyItem;
 }
 
+function updateHistoryFilterChips() {
+  if (!historyFilters) {
+    return;
+  }
+
+  historyFilters.querySelectorAll('.filter-chip').forEach((chip) => {
+    const isAll = chip.dataset.category === 'all';
+    const isActive = isAll ? !activeHistoryFilter : chip.dataset.category === activeHistoryFilter;
+    chip.classList.toggle('active', isActive);
+    chip.setAttribute('aria-pressed', String(isActive));
+  });
+}
+
+function renderHistoryList(items, emptyMessage) {
+  const historyListEl = document.getElementById('historyList');
+  if (!historyListEl) {
+    return;
+  }
+
+  historyListEl.innerHTML = '';
+  if (items.length === 0) {
+    historyListEl.innerHTML = `<p style="text-align: center; color: #9aa3af; padding: 20px;">${emptyMessage}</p>`;
+    return;
+  }
+
+  items.forEach((item) => {
+    historyListEl.appendChild(buildHistoryItem(item));
+  });
+}
+
+function applyHistoryFilter() {
+  const isFiltered = Boolean(activeHistoryFilter);
+  const filteredItems = isFiltered
+    ? historyItemsCache.filter((item) => item.category === activeHistoryFilter)
+    : historyItemsCache;
+
+  const emptyMessage = isFiltered
+    ? 'No classifications for this category yet.'
+    : 'No classifications yet. Start by classifying a tweet!';
+
+  renderHistoryList(filteredItems, emptyMessage);
+  updateHistoryFilterChips();
+}
+
 function renderCharts(categoryCount) {
   if (!pieCanvas || !barCanvas || !window.Chart) {
     return;
@@ -1645,17 +1692,6 @@ async function loadDashboard() {
     };
   }
 
-  if (items.length === 0) {
-    historyListEl.innerHTML = '<p style="text-align: center; color: #9aa3af; padding: 20px;">No classifications yet. Start by classifying a tweet!</p>';
-    renderCharts({
-      'Rescue Request': 0,
-      'Damage Report': 0,
-      'Safety Update': 0,
-      'General Information': 0
-    });
-    return;
-  }
-
   const categoryCount = {
     'Rescue Request': 0,
     'Damage Report': 0,
@@ -1673,10 +1709,8 @@ async function loadDashboard() {
   avgConfidenceEl.textContent = `${statsPayload.avg_confidence || 0}%`;
   safetyCountEl.textContent = categoryCount['Safety Update'] || 0;
 
-  historyListEl.innerHTML = '';
-  items.forEach((item) => {
-    historyListEl.appendChild(buildHistoryItem(item));
-  });
+  historyItemsCache = items;
+  applyHistoryFilter();
 
   renderCharts(categoryCount);
 }
@@ -1684,6 +1718,22 @@ async function loadDashboard() {
 if (document.getElementById('historyList')) {
   authReady.then(() => {
     loadDashboard();
+  });
+}
+
+if (historyFilters) {
+  historyFilters.addEventListener('click', (event) => {
+    const button = event.target.closest('.filter-chip');
+    if (!button || !historyFilters.contains(button)) {
+      return;
+    }
+    const category = button.dataset.category || null;
+    if (category === 'all') {
+      activeHistoryFilter = null;
+    } else {
+      activeHistoryFilter = activeHistoryFilter === category ? null : category;
+    }
+    applyHistoryFilter();
   });
 }
 

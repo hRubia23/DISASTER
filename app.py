@@ -79,6 +79,7 @@ def keyword_subcategory(text: str) -> str:
     safety_keywords = [
         "evacuation", "evacuate", "evacuated", "shelter", "relief",
         "camp", "safety", "safe zone", "emergency services", "hospital",
+        "advisory", "warning", "alert", "watch", "bulletin",
         "lumikas", "paglikas",
         "evac center", "evacuation center", "evacuation camp",
         "evacuation site", "relief goods", "relief operations",
@@ -354,6 +355,35 @@ def login():
         }
     )
 
+def is_safety_advisory(text: str) -> bool:
+    lower = text.lower()
+    advisory_terms = [
+        "advisory",
+        "warning",
+        "watch",
+        "alert",
+        "forecast",
+        "bulletin",
+        "stay alert",
+        "stay safe",
+        "prepare",
+    ]
+    weather_terms = [
+        "rain",
+        "rainfall",
+        "flood",
+        "flooding",
+        "storm",
+        "typhoon",
+        "surge",
+        "winds",
+        "landslide",
+    ]
+    has_advisory = any(term in lower for term in advisory_terms)
+    has_weather = any(term in lower for term in weather_terms)
+    has_forecast_context = "expected" in lower or "forecast" in lower
+    return (has_advisory and has_weather) or (has_weather and has_forecast_context)
+
 def classify_text(text: str):
     model = get_model()
     model_used = "heuristic"
@@ -371,6 +401,16 @@ def classify_text(text: str):
         category = keyword_subcategory(text)
         confidence = 0.72
         model_used = "heuristic"
+
+    if (
+        model_used == "distilbert"
+        and category in {"Rescue Request", "Damage Report"}
+        and confidence < 0.6
+    ):
+        rule_category = keyword_subcategory(text)
+        if rule_category == "Safety Update" or is_safety_advisory(text):
+            category = "Safety Update"
+            model_used = "distilbert+rule"
 
     return category, confidence, model_used
 

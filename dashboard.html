@@ -83,6 +83,13 @@
     <section class="card">
       <h3>Classification History</h3>
       <p class="subtle">Recent classified tweets</p>
+      <div class="history-filters" id="historyFilters">
+        <button class="filter-chip all active" type="button" data-category="all" aria-pressed="true">All</button>
+        <button class="filter-chip rescue" type="button" data-category="Rescue Request" aria-pressed="false">Rescue</button>
+        <button class="filter-chip damage" type="button" data-category="Damage Report" aria-pressed="false">Damage</button>
+        <button class="filter-chip safety" type="button" data-category="Safety Update" aria-pressed="false">Safety</button>
+        <button class="filter-chip general" type="button" data-category="General Information" aria-pressed="false">General</button>
+      </div>
       <div class="history-list" id="historyList">
         <p style="text-align: center; color: #9aa3af; padding: 20px;">No classifications yet. Start by classifying a tweet!</p>
       </div>
