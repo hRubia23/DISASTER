@@ -65,7 +65,7 @@ Notes:
 ### Admin Test Credentials
 
 For testing admin features (dashboard, batch classification):
-- **Email**: `admin@disaster.local`
+- **Email**: `admin@disaster.com`
 - **Password**: `admin123`
 
 ---

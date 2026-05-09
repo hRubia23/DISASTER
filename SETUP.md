@@ -54,7 +54,7 @@ You can share the database by copying `users.db` to another machine and placing 
 ### Admin Credentials (for testing)
 
 Use these credentials to test admin features:
-- **Email**: `admin@disaster.local`
+- **Email**: `admin@disaster.com`
 - **Password**: `admin123`
 - **Full Name**: Admin User
 - **Organization**: DISASTER
