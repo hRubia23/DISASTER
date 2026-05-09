@@ -62,6 +62,12 @@ Notes:
 - The system uses cookie-based sessions (browser keeps the login).
 - If you are not logged in, `/` redirects you to `auth.html`.
 
+### Admin Test Credentials
+
+For testing admin features (dashboard, batch classification):
+- **Email**: `admin@disaster.local`
+- **Password**: `admin123`
+
 ---
 
 ## ML Classification API (Model-backed)

@@ -51,6 +51,17 @@ You can share the database by copying `users.db` to another machine and placing 
 2. Create an account (Register)
 3. Log in (Sign In)
 
+### Admin Credentials (for testing)
+
+Use these credentials to test admin features:
+- **Email**: `admin@disaster.local`
+- **Password**: `admin123`
+- **Full Name**: Admin User
+- **Organization**: DISASTER
+- **Role**: admin
+
+**Note**: This is for testing only. Change credentials before production deployment.
+
 ---
 
 ## 6) Optional: Enable ML model-backed classification
